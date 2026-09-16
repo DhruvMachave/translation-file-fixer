@@ -4,7 +4,7 @@ Browser-based tool for repairing and checking translation export files before th
 loaded into the study. Repairs the problems that are safe to repair, and raises everything
 else as a query for the study programmer or the RWS PM.
 
-**Open the tool:** https://ORG.github.io/REPO/
+**Open the tool:** https://dhruvmachave.github.io/translation-file-fixer/
 
 Nothing is uploaded. Files are read in the browser, repaired in memory, and downloaded
 back. There is no server, no network call and no storage, so clinical data never leaves
