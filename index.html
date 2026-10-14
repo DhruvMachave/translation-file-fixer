@@ -717,7 +717,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
   const isEnglishLocale = locale && /^en/i.test(locale);
   const isPseudo = locale === "enIM";
 
-  let pseudoLike = 0, labelsSeen = 0;
+  let pseudoLike = 0, labelsSeen = 0; const pseudoCodes = [];
   const foreignChars = {}; let foreignLabels = 0; const foreignCodes = []; let accentedLabels = 0, scriptRight = 0, scriptWrong = 0;
   const declKey = locale ? langKey(locale) : "";
   const idWanted = !isPseudo && (!!langGroupOf(declKey) || LETTER_ID.includes(declKey));
@@ -741,7 +741,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     }
     if(isLabelRow(code)){
       const sc = pseudoScore(row[T]);
-      if(sc !== null){ labelsSeen++; if(sc >= 0.6) pseudoLike++; }
+      if(sc !== null){ labelsSeen++; if(sc >= 0.6){ pseudoLike++; pseudoCodes.push(code); } }
     }
     const tgt = row[T] ?? "", src = row[O] ?? "";
     const nt = norm(tgt), ns = norm(src);
@@ -901,15 +901,21 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     const pct = Math.round(100 * pseudoLike / labelsSeen);
     const whole = pseudoLike === labelsSeen;
     const most = pct >= 50;
-    findings.push({ code:"(whole file)", act:"flag", rule:"Pseudo text under a real language code",
-      note: (whole
+    /* name the labels, the same way the letters finding does: ten on screen, all of them in the query list */
+    const wording = list => (whole
           ? `Every label in this file is made up almost entirely of the letter X, which is what a pseudo build looks like`
           : `${pseudoLike} of the ${labelsSeen} labels here are made up almost entirely of the letter X, which is what a pseudo build looks like`)
         + `, but the language code says ${locale ? (displayName(locale) || locale) : "something else"}. `
+        + (whole ? "" : `Labels affected: ${list}. `)
         + (most
           ? "This looks like the pseudo file delivered under the wrong code."
           : "The rest of the file is translated, so this looks like pseudo text left behind in a real delivery, which is easy to miss.")
-        + " Nothing has been changed." });
+        + " Nothing has been changed.";
+    const shownPseudo = pseudoCodes.length > 10
+      ? pseudoCodes.slice(0, 10).join(", ") + `, and ${pseudoCodes.length - 10} more`
+      : pseudoCodes.join(", ");
+    findings.push({ code:"(whole file)", act:"flag", rule:"Pseudo text under a real language code",
+      note: wording(shownPseudo), noteFull: wording(pseudoCodes.join(", ")), labels: pseudoCodes });
   }
 
   /* a site task in a language it is not localised into */
