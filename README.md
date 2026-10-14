@@ -24,6 +24,11 @@ is stored in the browser.
 
 **Start over** clears everything, including anything marked as ignorable.
 
+A ZIP can come from macOS or Windows. The system files each leaves behind (`__MACOSX`, `.DS_Store`, `Thumbs.db`,
+`desktop.ini` and the `~$` temporary files Office keeps beside an open workbook) are skipped, folders written with
+a backslash are read as folders, and a file that cannot be read is reported on its own without stopping the rest
+of the ZIP.
+
 ## What comes out
 
 Every file is returned as CSV, encoded UTF-8 with a byte order mark so Excel opens
@@ -93,7 +98,7 @@ works whether or not they have been answered.
 
 When a file's module is not one of the four accepted values, choose `ecoa`, `diary`,
 `sitetasks` or `clinros`, or type another value. Where several files declare the same
-value, one answer can be applied to all of them. This is ticked by default; untick it to
+value, one answer can be applied to all of them. This is checked by default; clear it to
 answer for that file only. The `modules` entry of the top-level configuration is rewritten,
 and nothing else in it.
 
@@ -104,7 +109,7 @@ does not match the code. The dropdown offers the 68 approved codes, each with it
 and country.
 
 - A **Suggested** group comes first when the tool can guess the right code: the code in the
-  file name, or the codes of the language it recognised in the text.
+  file name, or the codes of the language it recognized in the text.
 - The search box narrows the list by code, language or country. `span`, `es us`, `mexico`
   and `czechia` all work.
 - **Set code** writes the chosen code into every row of `LANGUAGE`, and the file is checked
@@ -187,6 +192,24 @@ Pseudo: `enIM`
 written `esUS`, `es_US` or `es-US`.
 
 </details>
+
+## Hosting and updating
+
+The whole tool is the single file `index.html`. The ZIP and spreadsheet libraries are
+embedded in it, so the page makes no further request once it has loaded. It is published
+with GitHub Pages.
+
+If Pages is set to deploy from a branch, publishing a new version is a matter of replacing
+`index.html` in that branch and committing. It is usually live within a minute, and users
+may need a hard refresh (Ctrl+F5) to clear the cached copy.
+
+To confirm which build is live, compare the file's checksum with the one you recorded:
+
+- Mac or Linux: `shasum -a 256 index.html`
+- Windows: `certutil -hashfile index.html SHA256`
+
+A private repository does not by itself make the published page private. Check the Pages
+visibility setting if that matters.
 
 ## Known limits
 

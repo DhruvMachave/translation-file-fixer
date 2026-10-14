@@ -1080,6 +1080,15 @@ async function readOne(name, getText, getBuf){
   }
   return null;
 }
+/* Files that an operating system or Office leaves inside a folder, and that are not part of a delivery:
+   macOS  - the __MACOSX folder, ._ resource files and .DS_Store (every name starting with a dot)
+   Windows - Thumbs.db, desktop.ini and the ~$ temporary file Office keeps beside an open workbook
+   Windows ZIP tools sometimes write folders with a backslash, so those are read as folders too. */
+const zipPath = name => String(name).replace(/\\/g, "/");
+function isSystemFile(full){
+  const p = zipPath(full), base = p.split("/").pop();
+  return p.includes("__MACOSX") || base.startsWith(".") || base.startsWith("~$") || /^(thumbs\.db|desktop\.ini)$/i.test(base);
+}
 async function ingest(list){
   const results = [];
   for(const f of list){
@@ -1090,26 +1099,32 @@ async function ingest(list){
       try{
         const zip = await JSZip.loadAsync(await f.arrayBuffer());
         for(const e of Object.values(zip.files)){
-          if(e.dir || e.name.includes("__MACOSX")) continue;
-          const parts = e.name.split("/");
+          const full = zipPath(e.name);
+          if(e.dir || isSystemFile(full)) continue;
+          const parts = full.split("/");
           const base = parts.pop();
-          if(base.startsWith(".")) continue;
           const dirs = parts.filter(Boolean).map(withUpdated);
           if(base.toLowerCase().endsWith(".zip")){
-            const inner = await JSZip.loadAsync(await e.async("arraybuffer"));
-            const innerDirs = dirs.concat([zipFolderName(base)]);
-            for(const ie of Object.values(inner.files)){
-              if(ie.dir || ie.name.includes("__MACOSX")) continue;
-              const ip = ie.name.split("/");
-              const ib = ip.pop();
-              if(ib.startsWith(".")) continue;
-              const r = await readOne(ib, () => ie.async("string"), () => ie.async("arraybuffer"));
-              if(r) results.push(nameOutput(r, innerDirs.concat(ip.filter(Boolean).map(withUpdated))));
-            }
+            try{
+              const inner = await JSZip.loadAsync(await e.async("arraybuffer"));
+              const innerDirs = dirs.concat([zipFolderName(base)]);
+              for(const ie of Object.values(inner.files)){
+                const ifull = zipPath(ie.name);
+                if(ie.dir || isSystemFile(ifull)) continue;
+                const ip = ifull.split("/");
+                const ib = ip.pop();
+                try{
+                  const r = await readOne(ib, () => ie.async("string"), () => ie.async("arraybuffer"));
+                  if(r) results.push(nameOutput(r, innerDirs.concat(ip.filter(Boolean).map(withUpdated))));
+                }catch(err){ results.push({ name:ib, outName:ib, outPath:ib, error:"Could not read this file" }); }
+              }
+            }catch(err){ results.push({ name:base, outName:base, outPath:base, error:"Could not open the ZIP" }); }
             continue;
           }
-          const r = await readOne(base, () => e.async("string"), () => e.async("arraybuffer"));
-          if(r) results.push(nameOutput(r, dirs));
+          try{
+            const r = await readOne(base, () => e.async("string"), () => e.async("arraybuffer"));
+            if(r) results.push(nameOutput(r, dirs));
+          }catch(err){ results.push({ name:base, outName:base, outPath:base, error:"Could not read this file" }); }
         }
       }catch(err){ results.push({ name:f.name, outName:f.name, outPath:f.name, error:"Could not open the ZIP" }); }
       continue;
