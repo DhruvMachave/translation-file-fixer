@@ -307,23 +307,23 @@ const DEFAULT_PHRASES = [
 
 const LOCALES = {
  /* first priority */
- ar_IL:"Arabic (Israel)", as_IN:"Assamese (India)", bn_IN:"Bengali (India)", cs_CZ:"Czech", da_DK:"Danish",
- de_AT:"German (Austria)", de_DE:"German (Germany)", el_GR:"Greek", en_AU:"English (Australia)",
+ ar_IL:"Arabic (Israel)", as_IN:"Assamese (India)", bn_IN:"Bengali (India)", cs_CZ:"Czech (Czechia)", da_DK:"Danish (Denmark)",
+ de_AT:"German (Austria)", de_DE:"German (Germany)", el_GR:"Greek (Greece)", en_AU:"English (Australia)",
  en_CA:"English (Canada)", en_GB:"English (UK)", en_IN:"English (India)", es_AR:"Spanish (Argentina)",
  es_ES:"Spanish (Spain)", es_MX:"Spanish (Mexico)", es_PR:"Spanish (Puerto Rico)", es_US:"Spanish (US)",
  fr_BE:"French (Belgium)", fr_CA:"French (Canada)", fr_FR:"French (France)", gu_IN:"Gujarati (India)",
- he_IL:"Hebrew (Israel)", hi_IN:"Hindi (India)", hu_HU:"Hungarian", it_IT:"Italian (Italy)",
- ja_JP:"Japanese", kn_IN:"Kannada (India)", ko_KR:"Korean", ml_IN:"Malayalam (India)", mr_IN:"Marathi (India)",
+ he_IL:"Hebrew (Israel)", hi_IN:"Hindi (India)", hu_HU:"Hungarian (Hungary)", it_IT:"Italian (Italy)",
+ ja_JP:"Japanese (Japan)", kn_IN:"Kannada (India)", ko_KR:"Korean (South Korea)", ml_IN:"Malayalam (India)", mr_IN:"Marathi (India)",
  nl_BE:"Dutch (Belgium)", nl_NL:"Dutch (Netherlands)", or_IN:"Odia (India)", pa_IN:"Punjabi (India)",
- pl_PL:"Polish", pt_BR:"Portuguese (Brazil)", ro_RO:"Romanian", ru_IL:"Russian (Israel)",
- ru_RU:"Russian (Russia)", ru_UA:"Russian (Ukraine)", sk_SK:"Slovak", ta_IN:"Tamil (India)",
- te_IN:"Telugu (India)", tr_TR:"Turkish", uk_UA:"Ukrainian", ur_IN:"Urdu (India)",
+ pl_PL:"Polish (Poland)", pt_BR:"Portuguese (Brazil)", ro_RO:"Romanian (Romania)", ru_IL:"Russian (Israel)",
+ ru_RU:"Russian (Russia)", ru_UA:"Russian (Ukraine)", sk_SK:"Slovak (Slovakia)", ta_IN:"Tamil (India)",
+ te_IN:"Telugu (India)", tr_TR:"Turkish (Turkey)", uk_UA:"Ukrainian (Ukraine)", ur_IN:"Urdu (India)",
  zh_CN:"Chinese Simplified (China)", zh_TW:"Chinese Traditional (Taiwan)",
  /* second priority, released Jan 2026 */
- bg_BG:"Bulgarian", de_BE:"German (Belgium)", de_CH:"German (Switzerland)", en_IE:"English (Ireland)",
- en_MY:"English (Malaysia)", es_CO:"Spanish (Colombia)", fr_CH:"French (Switzerland)", hr_HR:"Croatian",
- it_CH:"Italian (Switzerland)", lt_LT:"Lithuanian", lv_LV:"Latvian", ms_MY:"Malay (Malaysia)",
- nb_NO:"Norwegian Bokmal", ru_LT:"Russian (Lithuania)", ru_LV:"Russian (Latvia)",
+ bg_BG:"Bulgarian (Bulgaria)", de_BE:"German (Belgium)", de_CH:"German (Switzerland)", en_IE:"English (Ireland)",
+ en_MY:"English (Malaysia)", es_CO:"Spanish (Colombia)", fr_CH:"French (Switzerland)", hr_HR:"Croatian (Croatia)",
+ it_CH:"Italian (Switzerland)", lt_LT:"Lithuanian (Lithuania)", lv_LV:"Latvian (Latvia)", ms_MY:"Malay (Malaysia)",
+ nb_NO:"Norwegian Bokmål (Norway)", ru_LT:"Russian (Lithuania)", ru_LV:"Russian (Latvia)",
  srRS:"Serbian Cyrillic (Serbia)", sbRS:"Serbian Latin (Serbia)",
  ta_MY:"Tamil (Malaysia)", zh_MY:"Chinese (Malaysia)",
  /* pseudo build: every letter becomes X, digits stay put */
@@ -353,6 +353,99 @@ const LATIN_ALLOW = {
  es:"áéíóúñü", pt:"ãâáàçéêíõóôúü", it:"àèéìòùî", ca:"àçèéíïòóúü",
  en:"", ms:"", id:"", tl:""
 };
+/* ===== Which language is this text in? =====
+   For every language that shares its script with another, count how many of a file's words are among that
+   language's most common function words. Text is accepted under a code only when its own language is the best
+   match. Languages that have a script of their own (Korean, Hebrew, Greek, Tamil ...) are settled by the script. */
+const LANG_WORDS = {
+  en: "the of and to in is you that it for on are with as i your have be at or this from by not but what how all when were been had has was do did does can will would should could may might more most some any no yes if so than then there their they we he she his her him my me us our which who whom whose each every other another over under about after before during last past often much many few little very also just only again once such these those into out up down off through between while because since until against without within one two three",
+  es: "el la los las lo un una unos unas de del al a en y o u e ni que qué se su sus mi mis tu tus me te le les nos con por para sin sobre entre hasta desde durante contra según como cómo cuando cuándo donde dónde quien quién cual cuál cuanto cuánto muy más menos mucho mucha muchos pocas poco ya aún todavía también tampoco pero sino aunque porque pues si sí no nunca siempre casi algunas algunos algún alguna ningún ninguna otro otra otros otras este esta estos estas ese esa eso esto ello es son está están fue fueron ser estar ha han he has hay había haber tenido tiene tienen tengo tuvo tan tanto seguido veces vez semanas semana días día últimas últimos pasadas",
+  pt: "o a os as um uma uns umas de do da dos das no na nos nas ao aos à às em e ou que se seu sua seus suas meu minha meus minhas teu tua me te lhe com por para sem sobre entre até desde durante contra como quando onde quem qual quanto muito mais menos pouco já ainda também mas porque pois não nunca sempre quase algum alguma alguns algumas nenhum nenhuma outro outra este esta esse essa isso isto é são está estão foi foram ser estar tem têm tenho teve há havia tido vezes vez semanas semana dias dia últimas últimos você vocês",
+  it: "il lo la i gli le un uno una di del dello della dei degli delle a al allo alla ai agli alle da dal dallo dalla dai dagli dalle in nel nello nella nei negli nelle con su sul sullo sulla per tra fra e ed o ma se che chi cui non né come quando dove quanto quanta quanti molto più meno poco già ancora anche sempre mai quasi alcuni alcune qualche nessuno nessuna altro altra questo questa questi queste quello quella è sono stato stata stati essere ha hanno ho hai abbiamo avere fatto può possono ogni tutto tutti tutte volte volta settimane settimana giorni giorno ultime ultimi scorse l dell all nell sull un po",
+  fr: "le la les l un une des du de d et ou mais donc or ni car que qu qui quoi dont où à au aux en dans par pour sur sous avec sans entre vers chez depuis pendant avant après ce cet cette ces se s si sa son ses mon ma mes ton ta tes votre vos notre nos leur leurs je j tu il elle on nous vous ils elles me m te t lui y ne n pas plus moins très trop peu beaucoup tout tous toute toutes aussi encore déjà jamais toujours souvent parfois est sont été être avoir a ont avait eu fois semaines semaine jours jour dernières derniers",
+  de: "der die das den dem des ein eine einen einem einer eines und oder aber denn sondern dass daß ob wie wenn als dann weil nicht kein keine keinen keinem keiner ist sind war waren sein bin bist seid hat haben hatte hatten wird werden wurde wurden kann können konnte muss müssen soll sollen will wollen darf dürfen in im an am auf aus bei mit nach von vom zu zum zur für über unter vor zwischen durch gegen ohne um bis seit während ich du er sie es wir ihr mich dich sich mir dir ihm ihnen uns euch mein meine dein deine seine ihre unser sehr mehr nur auch noch schon immer nie oft manchmal viel viele wochen woche tage tag letzten letzte",
+  nl: "de het een en of maar want dat die dit deze er hier daar niet geen niets wel nog al ook nu dan toen als omdat dus zodat terwijl van in op aan met voor door uit bij naar over onder tegen zonder tot tussen om na sinds tijdens is zijn was waren ben bent wordt worden werd werden heeft hebben had hadden kan kunnen kon moet moeten zal zullen wil willen mag ik je jij u hij zij ze we wij jullie mij me jou hem haar ons onze mijn jouw uw zijn hun zeer veel meer weinig vaak soms altijd nooit bijna alle sommige andere weken week dagen dag afgelopen laatste",
+  da: "og eller men at som der det den de en et i på af til fra med for om ved under over efter før mellem uden mod hos ikke ingen intet noget nogen nogle meget mere mindre lidt mange få altid aldrig ofte gange næsten jeg du han hun vi jer mig dig ham hende os dem min mit mine din dit dine sin sit sine vores jeres deres er var været være har have havde haft bliver blive blev blevet kan kunne skal skulle vil ville må hvor hvad hvem hvilken hvilket hvilke hvordan hvornår hvorfor hvis når da så også stadig allerede kun sidste uger uge dage dag",
+  nb: "og eller men at som der det den de en et i på av til fra med for om ved under over etter før mellom uten mot hos ikke ingen ingenting noe noen mye mer mindre litt mange få alltid aldri ofte ganger nesten jeg du han hun vi dere meg deg ham henne oss dem min mitt mine din ditt dine sin sitt sine vår vårt våre deres er var vært være har ha hadde hatt blir bli ble blitt kan kunne skal skulle vil ville må hvor hva hvem hvilken hvilket hvilke hvordan når hvorfor hvis da så også fortsatt allerede bare siste uker uke dager dag",
+  pl: "i w we z ze na do od po o u za przez przy dla pod nad przed między bez oraz lub albo ale lecz że żeby aby gdy kiedy jeśli jeżeli czy nie tak już jeszcze też także tylko bardzo więcej mniej mało dużo często rzadko zawsze nigdy prawie jest są był była było byli były być będzie mam ma masz mają miał miała miało to ten ta te ci tych tym tego tej który która które którzy jak co kto gdzie dlaczego ile ja ty on ona ono my wy oni one mnie mi cię go ją je nas was wam ich im mój moja moje twój twoja jego jej nasz wasz ostatnich ostatnie tygodni tygodnie tygodniu dni dzień razy",
+  cs: "a i v ve na z ze do od po o u k ke za pro při pod nad před mezi bez nebo ale však že aby když pokud zda jestli ne ano už ještě také taky jen velmi více méně málo hodně často zřídka vždy nikdy téměř je jsou byl byla bylo byli byly být bude mám má máte mají měl měla to ten ta ty ti tyto tento který která které kteří jak co kdo kde proč kolik já on ona ono my vy oni mě mi tě ho ji nás vás nám vám jejich jim můj moje tvůj jeho její náš váš posledních poslední týdnů týdny týdnu dnů dny krát či jste jsem jsme není nemám žádné žádný žádná jedno jedna jeden dnes prosím své svůj svých vaše vašeho jako tak tedy proto potom tady tam trochu někdy",
+  sk: "a i v vo na z zo do od po o u k ku za pre pri pod nad pred medzi bez alebo ale však že aby keď ak či nie áno už ešte tiež len veľmi viac menej málo veľa často zriedka vždy nikdy takmer je sú bol bola bolo boli byť bude mám má máte majú mal mala to ten tá tie tí tento ktorý ktorá ktoré ktorí ako čo kto kde prečo koľko ja ty on ona ono my vy oni mňa mi ťa ho ju nás vás nám vám ich im môj moje tvoj jeho jej náš váš posledných posledné týždňov týždne týždni dní dni krát",
+  hu: "a az egy és vagy de hogy nem is még már csak mint ha ami aki amit ahol amikor mert mivel így úgy itt ott ez ezt azt ezek azok ebben abban erre arra meg el be ki fel le át rá van volt lesz vannak voltak lenni nincs nincsenek lehet kell fog fogok én te ő mi ti ők engem téged őt minket titeket őket nekem neked neki nekünk nektek nekik saját nagyon több kevesebb kevés sok gyakran ritkán mindig soha majdnem utolsó héten hét napon nap alkalommal",
+  ro: "și în de la cu pe pentru din dintre prin sub peste fără către spre despre între după înainte până sau dar însă că ca să dacă când unde cum cine ce care cât nu da încă deja doar foarte mai mult puțin des rar mereu niciodată aproape este sunt a fost au avea am ai are avem aveți fi era vor va o un niște acest această acești aceste acel acea eu tu el ea noi voi ei ele mă te îl ne vă îi le mine tine mi ți îți își său sa sale lui lor mea meu mele tău ta tale ultimele ultima săptămâni săptămână zile zi dată ori",
+  hr: "i u je se na da za od ne su s sa iz do o po pri pod nad pred između bez ili ali već jer kako što koji koja koje kad kada gdje zašto koliko ako li nije nisu bio bila bilo bili bile biti će ću ćeš ćemo ćete imam ima imaš imamo imate imaju sam si smo ste ja ti on ona ono mi vi oni one me te ga ju nas vas nam vam ih im moj moja moje tvoj tvoja njegov njezin naš vaš vrlo više manje malo mnogo često rijetko uvijek nikada gotovo posljednja posljednjih zadnjih poslednjih poslednja tjedna tjedana tjedan nedelje nedelja nedelju dana dan puta",
+  lt: "ir bei ar bet kad kaip kur kada kodėl kas koks kokia kokie kokios kiek taip ne yra buvo bus būti turi turiu turite turėjo su be iš į apie per po prie nuo iki už dėl pagal tarp virš jis ji jie jos aš tu mes jūs mane tave jį ją mus jus juos jų mano tavo jo mūsų jūsų labai daugiau mažiau mažai daug dažnai retai visada niekada beveik paskutinių pastarąsias pastarąjį savaičių savaites savaitę dienų dienas dienos kartų kartą šios šie šis tai",
+  lv: "un vai bet ka kā kur kad kāpēc kas kāds kāda kādi cik jā nē ir bija būs būt man tev viņam viņai mums jums viņiem ar bez no uz par pēc pie līdz aiz dēļ starp virs pa es tu viņš viņa mēs jūs viņi viņas mani tevi viņu mūs mans mana tavs tava mūsu jūsu ļoti vairāk mazāk maz daudz bieži reti vienmēr nekad gandrīz pēdējo pēdējās nedēļu nedēļās nedēļas dienu dienas reizes reizi šādas šīs šis tas",
+  tr: "ve bir bu şu o için ile de da ki mi mı mu mü ne nasıl nerede zaman neden kim hangi kaç çok daha az en gibi ama fakat ya veya ise değil hayır evet var yok olarak olan oldu olmuştur olacak bana sana ona bize size onlara ben sen biz siz onlar beni seni onu bizi sizi onları benim senin onun bizim sizin onların son hafta haftada haftadır gün günde kez kere sık sıklıkla nadiren her asla neredeyse tüm bazı hiç lütfen aşağıdaki",
+  ms: "dan yang di ke dari untuk dengan pada ini itu atau adalah tidak anda saya awak kami kita mereka dia telah sudah akan boleh dalam oleh sebagai juga lebih kurang sangat banyak sedikit selalu sering jarang pernah hampir semua setiap beberapa apa bagaimana bila bilakah mengapa siapa berapa minggu hari lalu terakhir kali sila adakah",
+  ru: "и в во не на я что с со он как это по но они к у мы вы за из от же то все она так его ли бы для вас вам был была было были быть или да нет когда где почему сколько часто какой какая какие который которая которые если чтобы чем при про над под между без до после через только очень более менее много мало иногда никогда всегда почти последних последние недели недель неделю дней дня день раз раза",
+  uk: "і й та в у не на я що з із він як це по але вони до ми ви за від бо то всі вона так його чи б для вас вам був була було були бути або ні коли де чому скільки часто який яка які котрий якщо щоб ніж при про над під між без після через тільки дуже більше менше багато мало іноді ніколи завжди майже останніх останні тижні тижнів тиждень днів дня день раз разів",
+  bg: "и на в не се да за с от са е по ли ще като че към при или има но какво как кога къде защо колко кой коя кои който която които ако до след чрез само много повече по-малко често рядко винаги никога почти последните седмици седмица дни ден път пъти аз ти той тя ние вие те ме го я ни ви ги ми му им мой моя мое твой негов нейн наш ваш",
+  sr: "и у је се на да за од не су са из до о по при под над пред између без или али већ јер како шта који која које када где зашто колико ако ли није нису био била било били биле бити ће ћу имам има имаш имамо имате имају сам си смо сте ја ти он она оно ми ви они оне ме те га ју нас вас нам вам их им мој моја моје твој твоја његов њен наш ваш врло више мање мало много често ретко увек никада готово последњих недеља недеље недељу дана дан пута",
+  hi: "है हैं का की के में से को और यह पर नहीं कि भी था थे थी कर करते किया हो होता होती गया जा रहे रहा रही तक लिए साथ बहुत कम ज्यादा अक्सर कभी हमेशा लगभग पिछले सप्ताह सप्ताहों दिन दिनों बार आप मैं मुझे हम तुम वह वे उन उस इस इन जो कौन क्या कहाँ कब क्यों कैसे कितना",
+  mr: "आहे आहेत होता होती होते नाही आणि मध्ये चा ची चे च्या ला ना ने त्या या हा हे ही तो ती ते मी तू तुम्ही आम्ही आपण तुला मला त्याला कसे का कधी कुठे काय कोण किती खूप कमी जास्त नेहमी कधीकधी जवळजवळ गेल्या आठवड्यात आठवड्यांत आठवडे दिवस दिवसांत वेळा"
+};
+const LANG_GROUPS = { latin:["en", "es", "pt", "it", "fr", "de", "nl", "da", "nb", "pl", "cs", "sk", "hu", "ro", "hr", "lt", "lv", "tr", "ms"], cyrillic:["ru", "uk", "bg", "sr"], devanagari:["hi", "mr"] };
+const LANG_NAMES = { en:"English", es:"Spanish", pt:"Portuguese", it:"Italian", fr:"French", de:"German", nl:"Dutch", da:"Danish",
+  nb:"Norwegian", pl:"Polish", cs:"Czech", sk:"Slovak", hu:"Hungarian", ro:"Romanian", hr:"Croatian or Serbian (Latin)", lt:"Lithuanian",
+  lv:"Latvian", tr:"Turkish", ms:"Malay", ru:"Russian", uk:"Ukrainian", bg:"Bulgarian", sr:"Serbian (Cyrillic)", hi:"Hindi", mr:"Marathi",
+  zh:"Chinese", ja:"Japanese", ar:"Arabic", ur:"Urdu", bn:"Bengali", as:"Assamese" };
+/* languages so close that the whole-list comparison cannot separate them; for these, only the words that one
+   uses and the other does not are compared */
+const CLOSE_LANGS = { da:["nb"], nb:["da"], cs:["sk"], sk:["cs"], ru:["uk","bg","sr"], uk:["ru","bg","sr"], bg:["ru","uk","sr"], sr:["ru","uk","bg"] };
+let _langSets = null;
+const langSets = () => _langSets || (_langSets = Object.fromEntries(Object.entries(LANG_WORDS).map(([k, v]) => [k, new Set(v.split(/\s+/).filter(Boolean))])));
+const langKey = c => { const k = String(c || "").slice(0, 2).toLowerCase(); return k === "sb" ? "hr" : k; };
+const langGroupOf = k => Object.keys(LANG_GROUPS).find(g => LANG_GROUPS[g].includes(k)) || null;
+const LETTER_ID = ["zh", "ja", "ar", "ur", "bn", "as"];      /* told apart by letters, not words */
+
+/* st: { N, map (word -> count), cjkLabels, kanaLabels, arL, urL, asL, bnL } gathered from a file's translated labels */
+function identifyLanguage(decl, st){
+  const sets = langSets(), nm = k => LANG_NAMES[k] || k, pct = x => Math.round(100 * x) + "%";
+  const group = langGroupOf(decl);
+  if(group){
+    if(st.N < 100) return null;                                  /* too little text to be sure */
+    const g = LANG_GROUPS[group], hits = {};
+    g.forEach(l => { hits[l] = 0; });
+    for(const [w, n] of st.map) for(const l of g) if(sets[l].has(w)) hits[l] += n;
+    const rd = hits[decl] / st.N;
+    let best = null, br = 0;
+    for(const l of g){ if(l === decl) continue; const r = hits[l] / st.N; if(r > br){ br = r; best = l; } }
+    if(best && hits[best] >= 12 && br >= 1.4 * rd && br - rd >= 0.05)
+      return { detected: best, short: `the text reads as ${nm(best)} rather than ${nm(decl)}`,
+        note: `The text reads as ${nm(best)} rather than ${nm(decl)}: ${pct(br)} of its words are common ${nm(best)} words, against ${pct(rd)} for ${nm(decl)}.` };
+    let bx = null;
+    for(const l of (CLOSE_LANGS[decl] || [])){
+      let ed = 0, el = 0; const seen = [];
+      for(const [w, n] of st.map){ const a = sets[decl].has(w), b = sets[l].has(w); if(a && !b) ed += n; else if(b && !a){ el += n; seen.push([w, n]); } }
+      if(el >= 10 && el >= 2.5 * Math.max(1, ed) && (!bx || el > bx.el)) bx = { l, ed, el, seen: seen.sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]) };
+    }
+    if(bx) return { detected: bx.l, short: `the text reads as ${nm(bx.l)} rather than ${nm(decl)}`,
+      note: `The text reads as ${nm(bx.l)} rather than ${nm(decl)}: it uses ${bx.el} words that only ${nm(bx.l)} uses (such as ${bx.seen.join(", ")}) and only ${bx.ed} that only ${nm(decl)} uses.` };
+    return null;
+  }
+  if(decl === "ja" && st.cjkLabels >= 15 && st.kanaLabels / st.cjkLabels < 0.25)
+    return { detected: "zh", short: "the text reads as Chinese rather than Japanese",
+      note: `Only ${st.kanaLabels} of the ${st.cjkLabels} labels written in Chinese characters contain Japanese kana, which every Japanese sentence uses. The text reads as Chinese rather than Japanese.` };
+  if(decl === "zh" && st.cjkLabels >= 15 && st.kanaLabels / st.cjkLabels > 0.25)
+    return { detected: "ja", short: "the text reads as Japanese rather than Chinese",
+      note: `${st.kanaLabels} of the ${st.cjkLabels} labels written in Chinese characters contain Japanese kana, which Chinese does not use. The text reads as Japanese rather than Chinese.` };
+  if((decl === "ar" || decl === "ur") && st.arL + st.urL >= 30){
+    const u = st.urL / (st.arL + st.urL);
+    if(decl === "ar" && u > 0.5) return { detected: "ur", short: "the text reads as Urdu rather than Arabic",
+      note: `The text has ${st.urL} letters found only in Urdu against ${st.arL} found only in Arabic. It reads as Urdu rather than Arabic.` };
+    if(decl === "ur" && u < 0.5) return { detected: "ar", short: "the text reads as Arabic rather than Urdu",
+      note: `The text has ${st.arL} letters found only in Arabic against ${st.urL} found only in Urdu. It reads as Arabic rather than Urdu.` };
+  }
+  if((decl === "bn" || decl === "as") && st.asL + st.bnL >= 20){
+    const a = st.asL / (st.asL + st.bnL);
+    if(decl === "bn" && a > 0.5) return { detected: "as", short: "the text reads as Assamese rather than Bengali",
+      note: `The text has ${st.asL} letters found only in Assamese against ${st.bnL} Bengali "ra" letters. It reads as Assamese rather than Bengali.` };
+    if(decl === "as" && a < 0.5) return { detected: "bn", short: "the text reads as Bengali rather than Assamese",
+      note: `The text has ${st.bnL} Bengali "ra" letters against ${st.asL} found only in Assamese. It reads as Bengali rather than Assamese.` };
+  }
+  return null;
+}
+
 const RTL = ["he","ar","fa","ur"];
 const SCRIPT_RE = {};
 for(const s of ["Tamil","Telugu","Kannada","Malayalam","Oriya","Devanagari","Bengali","Gujarati","Gurmukhi","Sinhala","Cyrillic","Greek","Hebrew","Arabic","Thai","Hangul","Han","Hiragana","Katakana","Latin"]){
@@ -626,6 +719,9 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
 
   let pseudoLike = 0, labelsSeen = 0;
   const foreignChars = {}; let foreignLabels = 0; const foreignCodes = []; let accentedLabels = 0, scriptRight = 0, scriptWrong = 0;
+  const declKey = locale ? langKey(locale) : "";
+  const idWanted = !isPseudo && (!!langGroupOf(declKey) || LETTER_ID.includes(declKey));
+  const idSt = { N:0, map:new Map(), cjkLabels:0, kanaLabels:0, arL:0, urL:0, asL:0, bnL:0 };
   const latinAllow = locale ? LATIN_ALLOW[String(locale).slice(0,2).toLowerCase()] : undefined;
   rows.forEach((row, idx) => {
     const code = String(row[C] ?? "");
@@ -649,6 +745,38 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     }
     const tgt = row[T] ?? "", src = row[O] ?? "";
     const nt = norm(tgt), ns = norm(src);
+
+      /* the translated text of every label, for working out what language it is in */
+      if(idWanted && isLabelRow(code)){
+        const t = stripTags(String(tgt));
+        const letters = (t.match(/\p{L}/gu) || []).length;
+        const copied = stripTags(String(src)).replace(/\s+/g, " ").trim().toLowerCase() === t.replace(/\s+/g, " ").trim().toLowerCase();
+        const ps = pseudoScore(tgt);
+        if(letters >= 8 && !copied && !(ps !== null && ps >= 0.6)){
+          const tk = t.toLowerCase().match(/[\p{L}\p{M}]+/gu) || [];
+          if(tk.length >= 2) for(const w of tk){ idSt.N++; idSt.map.set(w, (idSt.map.get(w) || 0) + 1); }
+          if((t.match(/[\u3040-\u30ff\u3400-\u9fff]/gu) || []).length >= 4){ idSt.cjkLabels++; if(/[\u3040-\u30ff]/u.test(t)) idSt.kanaLabels++; }
+          idSt.arL += (t.match(/[\u064a\u0643\u0629\u0649]/gu) || []).length;
+          idSt.urL += (t.match(/[\u06cc\u06a9\u06c1\u06d2\u06ba\u0679\u0688\u0691\u06af\u0686\u067e\u06be\u0698]/gu) || []).length;
+          idSt.asL += (t.match(/[\u09f0\u09f1]/gu) || []).length;
+          idSt.bnL += (t.match(/\u09b0/gu) || []).length;
+        }
+      }
+
+      /* a language written in the Latin alphabet, with a label in another script altogether */
+      if(isLabelRow(code) && nt && !wantScripts && latinAllow !== undefined && !isPseudo){
+        const plainL = stripTags(nt).trim();
+        const foundL = scriptsPresent(plainL);
+        const totL = Object.values(foundL).reduce((a, b) => a + b, 0);
+        const handleL = !/\s/.test(plainL) && (plainL.includes("@") || /^[a-z][a-z0-9+.-]*:\/\//i.test(plainL));
+        if((foundL.Latin || 0) > 0) scriptRight++;
+        else if(totL >= 8 && !handleL){
+          const topL = Object.entries(foundL).sort((a, b) => b[1] - a[1])[0][0];
+          scriptWrong++;
+          findings.push({ idx, code, src, tgt, act:"flag", rule:"Wrong language for this code", foundScript: topL,
+            note: `This label is written in ${SCRIPT_NAMES[topL] || topL}, but the code says ${localeName}, which uses the Latin alphabet. Check the file was not delivered under the wrong language code, because loading it would overwrite the wrong language.` });
+        }
+      }
 
     if(isLabelRow(code) && nt && isPseudo){
       /* a pseudo build replaces every letter with X, so anything still readable was
@@ -682,14 +810,18 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
         if(inScript > 0) scriptRight++;
         if(inScript === 0 && totalLetters >= 8 && !isHandle){
           const top = Object.entries(found).sort((a,b) => b[1] - a[1])[0][0];
-          if(top === "Latin"){
-            /* Latin where a non-Latin script belongs: English, or another Latin language */
+          /* Latin text is only "untranslated English" when it is the source copied across; otherwise it is
+             a translation into some other language, which is a wrong-language problem */
+          const sameAsSource = stripTags(String(src ?? "")).replace(/\s+/g, " ").trim().toLowerCase()
+                            === stripTags(String(tgt ?? "")).replace(/\s+/g, " ").trim().toLowerCase();
+          if(top === "Latin" && (sameAsSource || isLegal(plain))){
             findings.push({ idx, code, src, tgt, act:"flag",
               rule: isLegal(plain) ? "Legal notice still in English" : "English text in a label",
               note: isLegal(plain)
                 ? `This label carries copyright or trademark wording and contains no ${scriptLabel} characters. Often deliberate — confirm the instrument licence allows it.`
                 : `${localeName} is written in ${scriptLabel}, but this label contains none of that script.` });
           }else{
+            /* another alphabet, or Latin text that is not the source copied across */
             scriptWrong++;
             findings.push({ idx, code, src, tgt, act:"flag", rule:"Wrong language for this code", foundScript: top,
               note: `This label is written in ${SCRIPT_NAMES[top] || top}, but the code says ${localeName}, which uses ${scriptLabel}. Check the file was not delivered under the wrong language code, because loading it would overwrite the wrong language.` });
@@ -737,6 +869,14 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
                 : (mods ? `The module is set to ${JSON.stringify(mods)}, which is not a single approved value.`
                         : "No module is set in the config.") });
     break;
+  }
+
+  /* what language is the text actually in? */
+  if(idWanted){
+    const res = identifyLanguage(declKey, idSt);
+    if(res) findings.push({ code:"(whole file)", act:"flag", rule:"Text does not look like the language of this code",
+      note: res.note + " This text is probably in a different language, so check the file was not delivered under the wrong code. Nothing has been changed.",
+      detected: res.detected, short: res.short });
   }
 
   /* letters that do not exist in the declared language: the text is another Latin language */
@@ -803,8 +943,8 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
   /* a language-code problem the user can resolve by supplying the right code */
   let langAsk = null;
   {
-    const LANG_RULES = ["Language code not recognised", "Language code not on the approved list",
-                        "Wrong language for this code", "Letters that do not belong to this language"];
+    const LANG_RULES = ["Language code not recognised", "Wrong language for this code", "Letters that do not belong to this language",
+                        "Text does not look like the language of this code"];
     /* an unusable code always needs answering; text from another language only does when most of the file is */
     const scriptShare = scriptWrong / Math.max(1, scriptWrong + scriptRight);
     const qualifies = x => {
@@ -819,13 +959,13 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
       if(hit.rule === "Language code not recognised"){
         reason = rawLocale ? `the LANGUAGE column reads "${rawLocale}", which is not a language code`
                            : "the LANGUAGE column has no language code in it";
-      }else if(hit.rule === "Language code not on the approved list"){
-        reason = `${toFileForm(locale)} is not on the approved list`;
       }else if(hit.rule === "Wrong language for this code"){
         const tally = {};
         findings.forEach(x => { if(x.rule === hit.rule && x.foundScript) tally[x.foundScript] = (tally[x.foundScript] || 0) + 1; });
         foundScript = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0] || null;
         reason = `the text is written in ${SCRIPT_NAMES[foundScript] || foundScript}, which does not match ${toFileForm(locale)} (${localeName})`;
+      }else if(hit.rule === "Text does not look like the language of this code"){
+        reason = hit.short;
       }else{
         reason = `the text uses letters that ${localeName} does not use, so it may be another language in the same alphabet`;
       }
@@ -839,6 +979,10 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
       if(foundScript){
         const cands = APPROVED_CODES.filter(a => { const sc = scriptsFor(a); return sc && sc.includes(foundScript); });
         if(cands.length && cands.length <= 3) cands.forEach(a => { const f = toFileForm(a); if(!suggestions.includes(f)) suggestions.push(f); });
+      }
+      if(hit.detected){
+        const dc = APPROVED_CODES.filter(a => langKey(a) === hit.detected);
+        if(dc.length && dc.length <= 3) dc.forEach(a => { const f = toFileForm(a); if(!suggestions.includes(f)) suggestions.push(f); });
       }
       langAsk = { current: rawLocale || (locale ? toFileForm(locale) : ""), reason, suggestions };
     }
@@ -1017,6 +1161,7 @@ const RULE_HELP = {
   "Numbers changed in the pseudo text":"Digits differ from the source.",
   "Language code not recognised":"Nothing usable in the LANGUAGE column.",
   "Language code not on the approved list":"Valid code, but not one of your 68.",
+  "Text does not look like the language of this code":"The text is in a different language from the one this code names.",
   "Repeated column name":"A column name appears twice.",
   "Cannot check for spilled text":"TRANSLATED is not the last column.",
   "Config could not be read":"The config could not be parsed.",
@@ -1467,7 +1612,7 @@ const REF_FIX = [
   ["Spreadsheets","XLSX and XLS come back as CSV."]
 ];
 const REF_FLAG = [
-  ["Wrong language for the code","Text in the wrong script, such as Hebrew under a Korean code. Or letters the language does not use, such as Czech letters under a Danish code. You can choose the correct code."],
+  ["Wrong language for the code","The text is not in the language of its code, for example Hebrew under a Korean code, Spanish under a Czech code or Russian under a Ukrainian code. Every language is compared with the others that share its alphabet. You can choose the correct code."],
   ["English left in a label","A label still in English. Copyright lines are listed on their own, as they are often meant to stay."],
   ["Pseudo language issues","XXXX text under a real code, or a label still in English under enIM. Numbers must match the source."],
   ["Tags not closed","<b>, <u> and <i> counted against their closing tags."],
