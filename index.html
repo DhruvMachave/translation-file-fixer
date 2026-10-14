@@ -117,6 +117,12 @@ button{cursor:pointer}
 .qall{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;color:var(--ink2);cursor:pointer}
 .qall input{accent-color:var(--steel);width:17px;height:17px}
 .qdone strong{font-family:var(--disp);font-weight:600}
+.qhelp{margin:-6px 0 12px;font-size:14px;color:var(--ink2)}
+.qerr{margin:10px 0 0;font-size:14px;color:var(--red)}
+.qerr:empty{display:none}
+#qlang{border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;min-width:320px;max-width:100%;background:#FBFCFD;font-family:inherit;font-size:inherit;color:var(--ink)}
+#qsearch{border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;min-width:230px;background:#FBFCFD;font-family:inherit;font-size:inherit;color:var(--ink)}
+.qhint{font-size:13px;color:var(--ink3)}
 
 /* tallies */
 .tally{display:flex;gap:22px;flex-wrap:wrap;margin:20px 2px 14px;font-size:14px;color:var(--ink2)}
@@ -354,6 +360,7 @@ for(const s of ["Tamil","Telugu","Kannada","Malayalam","Oriya","Devanagari","Ben
 }
 
 /* arIL, ar_IL and ar-IL all mean the same thing */
+const toFileForm = c => (c && /^[a-z]{2}[A-Za-z]{2}$/.test(c)) ? c.slice(0,2) + "_" + c.slice(2) : String(c || "");
 const keyOf = c => String(c||"").toLowerCase().replace(/[_\-\s]/g,"");
 function canonical(raw){
   const v = String(raw||"").trim();
@@ -577,6 +584,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
       if(!rawLocale) rawLocale = v;
     }
   }
+  const fromColumn = !!locale;
   /* the file name is only a fallback, and only when it yields a code we actually know;
      otherwise a name like pro_lang_x.csv would invent a locale out of thin air */
   if(!locale){
@@ -593,8 +601,16 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
         note: rawLocale ? `The LANGUAGE column reads "${rawLocale}", which is not a code on the approved list. Labels could not be checked against a writing system.`
                         : "No usable language code was found in the LANGUAGE column, so labels could not be checked against a writing system." });
     }else{
-      localeOk = approved.some(a => keyOf(a) === keyOf(locale));
-      if(!localeOk){
+      const onList = approved.some(a => keyOf(a) === keyOf(locale));
+      localeOk = onList && fromColumn;
+      if(!fromColumn){
+        /* the checks ran on a code taken from the file name, but the column is what gets loaded */
+        findings.push({ code:"LANGUAGE column", act:"flag", rule:"Language code not recognised",
+          note: (rawLocale
+              ? `The LANGUAGE column reads "${rawLocale}", which is not a language code, so the system will not accept it.`
+              : "The LANGUAGE column is empty, so the system has no language code for this file.")
+            + ` The file name suggests ${displayName(locale) || locale} (${toFileForm(locale)}) and the other checks were run on that basis, but the column itself has not been changed.` });
+      }else if(!onList){
         findings.push({ code:"LANGUAGE column", act:"flag", rule:"Language code not on the approved list",
           note:`The file uses ${locale}${displayName(locale) ? " (" + displayName(locale) + ")" : ""}, which is not on your approved list. Labels were still checked.` });
       }
@@ -609,21 +625,23 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
   const isPseudo = locale === "enIM";
 
   let pseudoLike = 0, labelsSeen = 0;
-  const foreignChars = {}; let foreignLabels = 0;
+  const foreignChars = {}; let foreignLabels = 0; const foreignCodes = []; let accentedLabels = 0, scriptRight = 0, scriptWrong = 0;
   const latinAllow = locale ? LATIN_ALLOW[String(locale).slice(0,2).toLowerCase()] : undefined;
   rows.forEach((row, idx) => {
     const code = String(row[C] ?? "");
     if(isConfigRow(code)) return;                    /* config is never a label */
     if(isLabelRow(code) && latinAllow !== undefined && !wantScripts){
       const txt = stripTags(String(row[T] ?? ""));
-      const odd = new Set();
+      const odd = new Set(); let accent = false;
       for(const ch of txt){
         if(ch.codePointAt(0) < 128) continue;
         if(!/\p{Script=Latin}/u.test(ch)) continue;
+        accent = true;
         if(latinAllow.includes(ch.toLowerCase())) continue;
         odd.add(ch.toLowerCase());
       }
-      if(odd.size){ foreignLabels++; odd.forEach(c => { foreignChars[c] = (foreignChars[c] || 0) + 1; }); }
+      if(accent) accentedLabels++;
+      if(odd.size){ foreignLabels++; foreignCodes.push(code); odd.forEach(c => { foreignChars[c] = (foreignChars[c] || 0) + 1; }); }
     }
     if(isLabelRow(code)){
       const sc = pseudoScore(row[T]);
@@ -661,6 +679,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
         const found = scriptsPresent(plain);
         const inScript = wantScripts.reduce((a,x) => a + (found[x] || 0), 0);
         const totalLetters = Object.values(found).reduce((a,b) => a + b, 0);
+        if(inScript > 0) scriptRight++;
         if(inScript === 0 && totalLetters >= 8 && !isHandle){
           const top = Object.entries(found).sort((a,b) => b[1] - a[1])[0][0];
           if(top === "Latin"){
@@ -671,7 +690,8 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
                 ? `This label carries copyright or trademark wording and contains no ${scriptLabel} characters. Often deliberate — confirm the instrument licence allows it.`
                 : `${localeName} is written in ${scriptLabel}, but this label contains none of that script.` });
           }else{
-            findings.push({ idx, code, src, tgt, act:"flag", rule:"Wrong language for this code",
+            scriptWrong++;
+            findings.push({ idx, code, src, tgt, act:"flag", rule:"Wrong language for this code", foundScript: top,
               note: `This label is written in ${SCRIPT_NAMES[top] || top}, but the code says ${localeName}, which uses ${scriptLabel}. Check the file was not delivered under the wrong language code, because loading it would overwrite the wrong language.` });
           }
         }
@@ -724,8 +744,15 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     const chars = Object.keys(foreignChars);
     if(chars.length >= 3 && foreignLabels >= 3){
       const top = chars.sort((a,b) => foreignChars[b] - foreignChars[a]).slice(0,6).join(" ");
+      const share = foreignLabels / Math.max(1, accentedLabels);
+      const wording = list => share >= 0.5
+        ? `${foreignLabels} labels use letters that are not part of ${localeName}, including ${top}. Labels affected: ${list}. The text appears to be a different language written in the same alphabet, so check the file was not delivered under the wrong code. Nothing has been changed.`
+        : `${foreignLabels} labels use letters that are not part of ${localeName}, including ${top}. Labels affected: ${list}. Only ${foreignLabels} of the ${accentedLabels} labels with accented letters are affected and the rest are consistent with ${localeName}, so the language code looks right and these labels probably contain text from another language. Nothing has been changed.`;
+      const shown = foreignCodes.length > 10
+        ? foreignCodes.slice(0, 10).join(", ") + `, and ${foreignCodes.length - 10} more`
+        : foreignCodes.join(", ");
       findings.push({ code:"(whole file)", act:"flag", rule:"Letters that do not belong to this language",
-        note: `${foreignLabels} labels use letters that are not part of ${localeName}, including ${top}. The text appears to be a different language written in the same alphabet, so check the file was not delivered under the wrong code. Nothing has been changed.` });
+        note: wording(shown), noteFull: wording(foreignCodes.join(", ")), labels: foreignCodes, share });
     }
   }
 
@@ -773,7 +800,51 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     fixed++;
   }
 
-  return { name, headers: STD, rows: outRows, findings: ordered, fixed, ask,
+  /* a language-code problem the user can resolve by supplying the right code */
+  let langAsk = null;
+  {
+    const LANG_RULES = ["Language code not recognised", "Language code not on the approved list",
+                        "Wrong language for this code", "Letters that do not belong to this language"];
+    /* an unusable code always needs answering; text from another language only does when most of the file is */
+    const scriptShare = scriptWrong / Math.max(1, scriptWrong + scriptRight);
+    const qualifies = x => {
+      if(x.act !== "flag" || !LANG_RULES.includes(x.rule)) return false;
+      if(x.rule === "Letters that do not belong to this language") return x.share >= 0.5;
+      if(x.rule === "Wrong language for this code") return scriptShare >= 0.5;
+      return true;
+    };
+    const hit = findings.find(qualifies);
+    if(hit){
+      let reason, foundScript = null;
+      if(hit.rule === "Language code not recognised"){
+        reason = rawLocale ? `the LANGUAGE column reads "${rawLocale}", which is not a language code`
+                           : "the LANGUAGE column has no language code in it";
+      }else if(hit.rule === "Language code not on the approved list"){
+        reason = `${toFileForm(locale)} is not on the approved list`;
+      }else if(hit.rule === "Wrong language for this code"){
+        const tally = {};
+        findings.forEach(x => { if(x.rule === hit.rule && x.foundScript) tally[x.foundScript] = (tally[x.foundScript] || 0) + 1; });
+        foundScript = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0] || null;
+        reason = `the text is written in ${SCRIPT_NAMES[foundScript] || foundScript}, which does not match ${toFileForm(locale)} (${localeName})`;
+      }else{
+        reason = `the text uses letters that ${localeName} does not use, so it may be another language in the same alphabet`;
+      }
+      const suggestions = [];
+      const fromName = canonical(localeFromName(name));
+      const approvedOf = c => APPROVED_CODES.find(a => keyOf(a) === keyOf(c));
+      if(fromName){
+        const a = approvedOf(fromName);
+        if(a && (!fromColumn || keyOf(a) !== keyOf(locale))) suggestions.push(toFileForm(a));
+      }
+      if(foundScript){
+        const cands = APPROVED_CODES.filter(a => { const sc = scriptsFor(a); return sc && sc.includes(foundScript); });
+        if(cands.length && cands.length <= 3) cands.forEach(a => { const f = toFileForm(a); if(!suggestions.includes(f)) suggestions.push(f); });
+      }
+      langAsk = { current: rawLocale || (locale ? toFileForm(locale) : ""), reason, suggestions };
+    }
+  }
+
+  return { name, headers: STD, rows: outRows, findings: ordered, fixed, ask, langAsk,
     review: findings.filter(f => f.act === "flag").length, locale, localeOk,
     keyT: "TRANSLATED", keyC: "CODE" };
 }
@@ -837,6 +908,14 @@ function buildRows(grid){
   return { headers, rows, over, dupes, tLast, spillSeen, titleRows: hi, trailingUnnamed };
 }
 
+function analyseKeep(name, b, wasXlsx){
+  const snap = { headers: b.headers.slice(), rows: b.rows.map(r => Object.assign({}, r)), over: new Map(b.over), wasXlsx,
+    shape: { titleRows: b.titleRows, dupes: b.dupes, tLast: b.tLast, spillSeen: b.spillSeen, trailingUnnamed: b.trailingUnnamed } };
+  const r = analyse(name, b.headers, b.rows, b.over, wasXlsx, b);
+  if(r && !r.error) r._src = snap;
+  return r;
+}
+
 async function readOne(name, getText, getBuf){
   const low = name.toLowerCase();
   if(low.endsWith(".csv")){
@@ -844,7 +923,7 @@ async function readOne(name, getText, getBuf){
     const grid = parseCSV(txt, sniffDelimiter(txt));
     if(!grid.length) return { name, error:"File is empty" };
     const b = buildRows(grid);
-    return analyse(name, b.headers, b.rows, b.over, false, b);
+    return analyseKeep(name, b, false);
   }
   if(low.endsWith(".xlsx") || low.endsWith(".xls")){
     if(typeof XLSX === "undefined") return { name, error:"Spreadsheet reader did not load. Save as CSV and try again." };
@@ -853,7 +932,7 @@ async function readOne(name, getText, getBuf){
     const grid = XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:false, blankrows:false });
     if(!grid.length) return { name, error:"Sheet is empty" };
     const b = buildRows(grid);
-    return analyse(name.replace(/\.xlsx?$/i, ".csv"), b.headers, b.rows, b.over, true, b);
+    return analyseKeep(name.replace(/\.xlsx?$/i, ".csv"), b, true);
   }
   return null;
 }
@@ -903,8 +982,8 @@ async function ingest(list){
 }
 
 
-function setModule(fileIdx, value){
-  const f = FILES[fileIdx];
+function setModule(fileIdx, value){ applyModule(FILES[fileIdx], value); }
+function applyModule(f, value){
   if(!f || !f.ask) return;
   const v = String(value||"").trim();
   if(!v) return;
@@ -913,6 +992,7 @@ function setModule(fileIdx, value){
   if(!parsed) return;
   const cfg = parsed.cfg;
   cfg.modules = [v];
+  f.answers = f.answers || {}; f.answers.module = v;
   row[f.keyT] = JSON.stringify(cfg, null, 2);   /* quotation marks inside labels are escaped, so they still display */
   const fd = f.findings.find(x => x.ask);
   if(fd){
@@ -931,7 +1011,7 @@ const RULE_HELP = {
   "English text in a label":"Not written in the script this language uses.",
   "Legal notice still in English":"Copyright wording, often deliberate.",
   "Formatting tag not closed":"An opening tag has no matching closing tag.",
-  "Module needs checking":"Needs one of ecoa, diary or sitetasks.",
+  "Module needs checking":"Needs one of ecoa, diary, sitetasks or clinros.",
   "Site task not localised into this language":"Site tasks go to zhCN, jaJP and enIM only.",
   "Label not pseudo-localised":"Still reads as English in the pseudo build.",
   "Numbers changed in the pseudo text":"Digits differ from the source.",
@@ -953,11 +1033,19 @@ const isIgnored = (f, x) => IGNORED.has(fid(f, x));
 const openFlags = f => f.error ? 0 : f.findings.filter(x => x.act === "flag" && !isIgnored(f, x)).length;
 const ignoredCount = f => f.error ? 0 : f.findings.filter(x => x.act === "flag" && isIgnored(f, x)).length;
 
-function pendingQuestions(){ return FILES.filter(f => !f.error && f.ask); }
+function pendingQuestions(){
+  const out = [];
+  FILES.forEach(f => {
+    if(f.error) return;
+    if(f.langAsk) out.push({ f, kind: "language" });
+    if(f.ask) out.push({ f, kind: "module" });
+  });
+  return out;
+}
 
 function moduleGroups(){
   const g = {};
-  pendingQuestions().forEach(f => {
+  FILES.filter(f => !f.error && f.ask).forEach(f => {
     const k = f.ask.current || "(none)";
     (g[k] = g[k] || []).push(f);
   });
@@ -977,6 +1065,71 @@ function answerModule(fileIdx, value, alsoSameValue){
   }
   QIDX = 0;
   render();
+}
+
+/* Supplying a language code changes which checks apply, so the file is analysed again from its
+   original input. Earlier answers are kept, and the code replaces the LANGUAGE value in every row. */
+function reanalyse(f, language){
+  const s = f._src;
+  const rows = s.rows.map(r => Object.assign({}, r));
+  const headers = s.headers.slice();
+  let LG = headers.find(h => String(h).trim().toUpperCase() === "LANGUAGE");
+  if(!LG){ LG = "LANGUAGE"; headers.push(LG); rows.forEach(r => { r[LG] = ""; }); }
+  const before = [];
+  rows.forEach(r => { const v = String(r[LG] ?? "").trim(); if(v && !before.includes(v)) before.push(v); });
+  rows.forEach(r => { r[LG] = language; });
+  const r2 = analyse(f.name, headers, rows, new Map(s.over), s.wasXlsx, Object.assign({}, s.shape));
+  if(r2.error) return f;
+  r2._src = s; r2.outName = f.outName; r2.outPath = f.outPath;
+  r2.answers = Object.assign({}, f.answers, { language });
+  r2.findings.unshift({ code: "LANGUAGE column", act: "fix", rule: "Language code set by you",
+    before: before.length ? before.join(", ") : "(empty)", after: language, mono: true,
+    note: "You supplied the language code. It replaces the LANGUAGE value in every row, and the other checks were run again against it." });
+  r2.fixed++;
+  if(r2.answers.module && r2.ask) applyModule(r2, r2.answers.module);
+  return r2;
+}
+
+/* searching the approved codes: every word typed must start a word in the language name, or sit inside the code */
+const normSearch = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+function filterCodes(query){
+  const toks = normSearch(query).split(" ").filter(Boolean);
+  if(!toks.length) return APPROVED_CODES.slice();
+  return APPROVED_CODES.filter(a => {
+    const key = keyOf(a), words = normSearch(displayName(a) || "").split(" ");
+    return toks.every(t => key.includes(t) || words.some(w => w.startsWith(t)));
+  });
+}
+function langOptions(sug, query){
+  const opt = a => { const c = toFileForm(a); return `<option value="${esc(c)}">${esc(c)} \u2014 ${esc(displayName(a) || "")}</option>`; };
+  const q = normSearch(query);
+  if(!q){
+    const sugOpts = (sug || []).map(c => { const a = APPROVED_CODES.find(x => keyOf(x) === keyOf(c)); return a ? opt(a) : ""; }).join("");
+    return ((sug || []).length ? "" : `<option value="" selected disabled>Choose the correct code\u2026</option>`)
+      + ((sug || []).length ? `<optgroup label="Suggested">${sugOpts}</optgroup>` : "")
+      + `<optgroup label="All approved codes">${APPROVED_CODES.map(opt).join("")}</optgroup>`;
+  }
+  const m = filterCodes(query);
+  if(!m.length) return `<option value="" selected disabled>No code matches \u201c${esc(String(query).trim())}\u201d</option>`;
+  const first = new Set((sug || []).map(keyOf));
+  const ordered = m.filter(a => first.has(keyOf(a))).concat(m.filter(a => !first.has(keyOf(a))));
+  return `<optgroup label="${m.length} match${m.length === 1 ? "" : "es"}">${ordered.map(opt).join("")}</optgroup>`;
+}
+
+/* returns { ok:true } or { ok:false, msg } so the question can explain a refusal */
+function answerLanguage(fileIdx, raw){
+  const f = FILES[fileIdx];
+  if(!f || !f.langAsk || !f._src) return { ok: false, msg: "" };
+  const text = String(raw || "").trim();
+  if(!text) return { ok: false, msg: "Choose a language code from the list." };
+  const c = canonical(text);
+  if(!c) return { ok: false, msg: `"${text}" is not a language code. Use the form es_US.` };
+  const hit = APPROVED_CODES.find(a => keyOf(a) === keyOf(c));
+  if(!hit) return { ok: false, msg: `${toFileForm(c)} is not on the approved list, so it cannot be used.` };
+  FILES[fileIdx] = reanalyse(f, toFileForm(hit));
+  QIDX = 0;
+  render();
+  return { ok: true };
 }
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -1036,23 +1189,25 @@ function render(){
       ${fixes} ${fixes===1?"repair":"repairs"} applied across ${ok.length} ${ok.length===1?"file":"files"}.
       ${flags ? flags + " " + (flags===1?"query":"queries") + " to raise before these go in." : ""}</div>`;
   }else{
-    const groups = moduleGroups();
     if(QIDX >= q.length) QIDX = 0;
-    const cur = q[QIDX];
-    const val = cur.ask.current || "(not set)";
-    const peers = (groups[cur.ask.current || "(none)"] || []).length;
+    const item = q[QIDX], cur = item.f;
     qb.className = "queue";
-    qb.innerHTML = `
+    const head = `
       <div class="qhead">
-        <h2>${q.length} ${q.length===1?"file needs":"files need"} a module confirmed</h2>
+        <h2>${q.length} ${q.length===1?"question needs":"questions need"} an answer</h2>
         <div class="qnav">
-          <button class="ghost" id="qprev" ${q.length<2?"disabled":""} aria-label="Previous file">Previous</button>
+          <button class="ghost" id="qprev" ${q.length<2?"disabled":""} aria-label="Previous question">Previous</button>
           <span class="qcount">${QIDX+1} of ${q.length}</span>
-          <button class="ghost" id="qnext" ${q.length<2?"disabled":""} aria-label="Next file">Next</button>
+          <button class="ghost" id="qnext" ${q.length<2?"disabled":""} aria-label="Next question">Next</button>
         </div>
-      </div>
+      </div>`;
+    if(item.kind === "module"){
+      const groups = moduleGroups();
+      const val = cur.ask.current || "(not set)";
+      const peers = (groups[cur.ask.current || "(none)"] || []).length;
+      qb.innerHTML = head + `
       <p class="qfile"><span class="mono">${esc(cur.outName || cur.name)}</span> says
-        <span class="pill">${esc(val)}</span>, which is not one of the three the system accepts.</p>
+        <span class="pill">${esc(val)}</span>, which is not one of the modules the system accepts (${esc(APPROVED_MODULES.join(", "))}).</p>
       <div class="qopts">
         ${APPROVED_MODULES.map(m => `<button class="opt" data-m="${m}">${m}</button>`).join("")}
         <input id="qcustom" type="text" placeholder="or type another value" aria-label="Custom module name">
@@ -1060,12 +1215,33 @@ function render(){
       </div>
       ${peers > 1 ? `<label class="qall"><input type="checkbox" id="qsame" checked>
         Apply to all ${peers} files that say <span class="mono">${esc(val)}</span></label>` : ""}`;
+      const same = () => { const c = $("qsame"); return c ? c.checked : false; };
+      qb.querySelectorAll(".opt").forEach(b => b.onclick = () => answerModule(FILES.indexOf(cur), b.dataset.m, same()));
+      $("qapply").onclick = () => { const v = $("qcustom").value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); };
+      $("qcustom").onkeydown = e => { if(e.key === "Enter"){ const v = e.target.value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); } };
+    }else{
+      const la = cur.langAsk, sug = la.suggestions || [];
+      qb.innerHTML = head + `
+      <p class="qfile"><span class="mono">${esc(cur.outName || cur.name)}</span> may have the wrong language code: ${esc(la.reason)}.</p>
+      <p class="qhelp">Loading it under the wrong code would overwrite another language. Choose the correct code and the file is checked again against it.</p>
+      <div class="qopts">
+        <input id="qsearch" type="search" placeholder="Search by code or language" aria-label="Search language codes" autocomplete="off">
+        <select id="qlang" aria-label="Correct language code">${langOptions(sug, "")}</select>
+        <button class="ghost" id="qlangset">Set code</button>
+        <span class="qhint" id="qhint" aria-live="polite"></span>
+      </div>
+      <p class="qerr" id="qerr" role="alert"></p>`;
+      const go = v => { const res = answerLanguage(FILES.indexOf(cur), v); if(!res.ok && $("qerr")) $("qerr").textContent = res.msg; };
+      $("qsearch").oninput = () => {
+        const text = $("qsearch").value, n = filterCodes(text).length;
+        $("qlang").innerHTML = langOptions(sug, text);
+        $("qhint").textContent = normSearch(text) ? (n ? `${n} match${n === 1 ? "" : "es"}` : "No match") : "";
+      };
+      $("qsearch").onkeydown = e => { if(e.key === "Enter"){ if(e.preventDefault) e.preventDefault(); if($("qlang").value) go($("qlang").value); } };
+      $("qlangset").onclick = () => go($("qlang").value);
+    }
     $("qprev").onclick = () => { QIDX = (QIDX - 1 + q.length) % q.length; render(); };
     $("qnext").onclick = () => { QIDX = (QIDX + 1) % q.length; render(); };
-    const same = () => { const c = $("qsame"); return c ? c.checked : false; };
-    qb.querySelectorAll(".opt").forEach(b => b.onclick = () => answerModule(FILES.indexOf(cur), b.dataset.m, same()));
-    $("qapply").onclick = () => { const v = $("qcustom").value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); };
-    $("qcustom").onkeydown = e => { if(e.key === "Enter"){ const v = e.target.value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); } };
   }
 
   /* ---- tallies ---- */
@@ -1255,35 +1431,17 @@ const dz = $("drop");
 dz.addEventListener("drop", e => ingest([...e.dataTransfer.files]));
 
 /* ---- query list: what has to go back to the study programmer or RWS PM ---- */
-const QUERY_OWNER = {
-  "Module needs checking":"Study programmer",
-  "Site task not localised into this language":"Study programmer",
-  "English text in a label":"RWS PM",
-  "Legal notice still in English":"RWS PM",
-  "Label not pseudo-localised":"Study programmer",
-  "Numbers changed in the pseudo text":"RWS PM",
-  "Formatting tag not closed":"RWS PM",
-  "Language code not recognised":"RWS PM",
-  "Language code not on the approved list":"RWS PM",
-  "Repeated column name":"RWS PM",
-  "Cannot check for spilled text":"RWS PM",
-  "Config could not be read":"Study programmer",
-  "Pseudo text under a real language code":"RWS PM",
-  "Wrong language for this code":"RWS PM",
-  "Letters that do not belong to this language":"RWS PM"
-};
-
 function queryRows(){
-  const out = [["FILE","LANGUAGE","RAISE WITH","QUERY","CODE","SOURCE","TRANSLATED","DETAIL"]];
+  const out = [["FILE","LANGUAGE","QUERY","CODE","SOURCE","TRANSLATED","DETAIL"]];
   FILES.forEach(f => {
     if(f.error){
-      out.push([f.outName || f.name, f.locale || "", "RWS PM", "File could not be read", "", "", "", f.error]);
+      out.push([f.outName || f.name, f.locale || "", "File could not be read", "", "", "", f.error]);
       return;
     }
     f.findings.filter(x => x.act === "flag" && !isIgnored(f, x)).forEach(x => {
-      out.push([f.outName || f.name, f.locale || "", QUERY_OWNER[x.rule] || "Study programmer",
+      out.push([f.outName || f.name, f.locale || "",
         x.rule, x.code || "", String(x.src ?? ""), String(x.tgt ?? ""),
-        String(x.note || "").replace(/\s+/g, " ")]);
+        String(x.noteFull || x.note || "").replace(/\s+/g, " ")]);
     });
   });
   return out;
@@ -1309,13 +1467,13 @@ const REF_FIX = [
   ["Spreadsheets","XLSX and XLS come back as CSV."]
 ];
 const REF_FLAG = [
-  ["Wrong language for the code","Text in the wrong script, such as Hebrew under a Korean code. Or letters the language does not use, such as Czech letters under a Danish code."],
+  ["Wrong language for the code","Text in the wrong script, such as Hebrew under a Korean code. Or letters the language does not use, such as Czech letters under a Danish code. You can choose the correct code."],
   ["English left in a label","A label still in English. Copyright lines are listed on their own, as they are often meant to stay."],
   ["Pseudo language issues","XXXX text under a real code, or a label still in English under enIM. Numbers must match the source."],
   ["Tags not closed","<b>, <u> and <i> counted against their closing tags."],
   ["Module in the config","Must be ecoa, diary, sitetasks or clinros. Anything else, and you are asked which it should be."],
   ["Site task in the wrong language","Site tasks go to zhCN, jaJP and enIM only. CSSBS and CSSLA go to every language."],
-  ["Language code","Must be readable and one of your 68 approved codes."],
+  ["Language code","Must be readable and one of your 68 approved codes. You can search for the correct code in a list and the file is checked again against it."],
   ["File shape","A column name used twice, TRANSLATED not last, or a config that cannot be read."]
 ];
 const refEsc = t => String(t).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
