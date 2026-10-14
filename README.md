@@ -188,24 +188,6 @@ written `esUS`, `es_US` or `es-US`.
 
 </details>
 
-## Hosting and updating
-
-The whole tool is the single file `index.html`. The ZIP and spreadsheet libraries are
-embedded in it, so the page makes no further request once it has loaded. It is published
-with GitHub Pages.
-
-If Pages is set to deploy from a branch, publishing a new version is a matter of replacing
-`index.html` in that branch and committing. It is usually live within a minute, and users
-may need a hard refresh (Ctrl+F5) to clear the cached copy.
-
-To confirm which build is live, compare the file's checksum with the one you recorded:
-
-- Mac or Linux: `shasum -a 256 index.html`
-- Windows: `certutil -hashfile index.html SHA256`
-
-A private repository does not by itself make the published page private. Check the Pages
-visibility setting if that matters.
-
 ## Known limits
 
 - Regional variants of one language are not told apart. Spanish text is accepted under any
