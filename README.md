@@ -47,7 +47,7 @@ Spreadsheets become `.csv`.
 | Issue | What happens |
 | --- | --- |
 | Text spilled past column E | Rejoined into column E, however many columns it ran across. |
-| Extra columns or a title row | Only `CLIENT`, `CODE`, `ORIGINAL_TEXT`, `LANGUAGE` and `TRANSLATED` come back. Any row above the column names, such as the study name, is removed, so only the column names sit at the top. |
+| Extra columns or a title row | Only `CLIENT`, `CODE`, `ORIGINAL_TEXT`, `LANGUAGE` and `TRANSLATED` come back. Any row above the column names, such as the study name, is removed, so only the column names sit at the top. Any duplicate or invalid column is also removed. |
 | Quotation marks around a cell | One at the very start and one at the very end of a `TRANSLATED` cell are removed. Quotes inside the sentence are kept. |
 | Language code with a hyphen | `ta-IN` becomes `ta_IN`. |
 | Untranslated validation message | A `TRANSLATED` cell holding one of the eight messages listed below, word for word, is made blank. |

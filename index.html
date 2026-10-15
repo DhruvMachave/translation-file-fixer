@@ -1616,7 +1616,7 @@ $("queries").onclick = () => {
 /* ---- reference tables, rendered from the rules themselves ---- */
 const REF_FIX = [
   ["Text spilled past column E","Rejoined into column E, however far it ran: F, G, or all the way to Z."],
-  ["Extra columns","Only CLIENT, CODE, ORIGINAL_TEXT, LANGUAGE and TRANSLATED come back. A title row above the column names, such as the study name, is removed, so only the column names sit at the top."],
+  ["Extra columns","Only CLIENT, CODE, ORIGINAL_TEXT, LANGUAGE and TRANSLATED come back. A title row above the column names, such as the study name, is removed, so only the column names sit at the top. Any duplicate or invalid column is also removed."],
   ["Quotes wrapping a cell","One removed from the start and one from the end. Quotes inside the sentence are kept."],
   ["Hyphen in the language code","ta-IN becomes ta_IN."],
   ["Untranslated validation messages","Blanked when they match the list below word for word."],
