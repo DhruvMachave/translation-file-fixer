@@ -272,7 +272,7 @@ button{cursor:pointer}
     <div class="rbody">
       <h4>Repaired automatically</h4>
       <ul class="rlist" id="refFix"></ul>
-      <h4>To clarify with the study programmer or RWS PM</h4>
+      <h4>To clarify with the study programmer or Translation Vendor PM</h4>
       <ul class="rlist" id="refFlag"></ul>
       <h4>Validation messages that get blanked</h4>
       <ul class="phr" id="phrList"></ul>
@@ -1468,7 +1468,7 @@ function render(){
     const n = gs.reduce((a,g) => a + g.items.length, 0);
     const openN = act === "flag" ? gs.reduce((a,g) => a + g.items.filter(x => !isIgnored(f, x)).length, 0) : n;
     h.textContent = act === "fix" ? `Repaired — ${n}`
-      : `To clarify with the study programmer or RWS PM — ${openN}` + (openN < n ? ` (${n - openN} ignored)` : "");
+      : `To clarify with the study programmer or Translation Vendor PM — ${openN}` + (openN < n ? ` (${n - openN} ignored)` : "");
     panel.appendChild(h);
 
     gs.forEach(g => {
@@ -1586,7 +1586,7 @@ const dz = $("drop");
 ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("hot"); }));
 dz.addEventListener("drop", e => ingest([...e.dataTransfer.files]));
 
-/* ---- query list: what has to go back to the study programmer or RWS PM ---- */
+/* ---- query list: what has to go back to the study programmer or Translation Vendor PM ---- */
 function queryRows(){
   const out = [["FILE","LANGUAGE","QUERY","CODE","SOURCE","TRANSLATED","DETAIL"]];
   FILES.forEach(f => {
