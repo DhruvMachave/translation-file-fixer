@@ -606,14 +606,6 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
       note:`The first ${shape.titleRows} row${shape.titleRows===1?" was":"s were"} above the column names and ${shape.titleRows===1?"was":"were"} skipped.` });
     fixed++;
   }
-  if(shape.dupes && shape.dupes.length){
-    findings.push({ code:"(header)", act:"flag", rule:"Repeated column name",
-      note:`The header repeats ${[...new Set(shape.dupes)].join(", ")}. The later copy has been renamed so its contents no longer overwrite the first, but check which column the system actually reads.` });
-  }
-  if(shape.tLast === false && shape.spillSeen){
-    findings.push({ code:"(header)", act:"flag", rule:"Cannot check for spilled text",
-      note:`TRANSLATED is not the last column, so text running past it cannot be told apart from the column that follows. ${shape.spillSeen} row${shape.spillSeen===1?" has":"s have"} content past TRANSLATED — check them by hand.` });
-  }
   if(wasXlsx){
     fixed++;
     findings.push({ act:"fix", code:"(whole file)", rule:"Converted to CSV",
@@ -854,7 +846,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
     const parsed = readConfig(raw);
     if(!parsed){
       findings.push({ idx, code, act:"flag", rule:"Config could not be read",
-        note:"The config is not readable even allowing for quotation marks inside labels, so the module was left alone." });
+        note:"The config could not be read, even allowing for quotation marks inside labels, so the module could not be checked. Check the module in the config by hand and leave the file as it is until you have." });
       break;
     }
     const cfg = parsed.cfg, recovered = parsed.recovered;
@@ -1183,9 +1175,7 @@ const RULE_HELP = {
   "Language code not recognised":"Nothing usable in the LANGUAGE column.",
   "Language code not on the approved list":"Valid code, but not one of your 68.",
   "Text does not look like the language of this code":"The text is in a different language from the one this code names.",
-  "Repeated column name":"A column name appears twice.",
-  "Cannot check for spilled text":"TRANSLATED is not the last column.",
-  "Config could not be read":"The config could not be parsed.",
+  "Config could not be read":"The config could not be parsed, so the module could not be checked.",
   "Pseudo text under a real language code":"Looks like the pseudo file sent under the wrong code.",
   "Wrong language for this code":"The text is in a different script from the one the code calls for.",
   "Letters that do not belong to this language":"Accented letters point to a different language in the same alphabet."
@@ -1626,21 +1616,21 @@ $("queries").onclick = () => {
 /* ---- reference tables, rendered from the rules themselves ---- */
 const REF_FIX = [
   ["Text spilled past column E","Rejoined into column E, however far it ran: F, G, or all the way to Z."],
-  ["Extra columns","Only CLIENT, CODE, ORIGINAL_TEXT, LANGUAGE and TRANSLATED come back. The header is found even if a title row sits above it."],
+  ["Extra columns","Only CLIENT, CODE, ORIGINAL_TEXT, LANGUAGE and TRANSLATED come back. A title row above the column names, such as the study name, is removed, so only the column names sit at the top."],
   ["Quotes wrapping a cell","One removed from the start and one from the end. Quotes inside the sentence are kept."],
   ["Hyphen in the language code","ta-IN becomes ta_IN."],
   ["Untranslated validation messages","Blanked when they match the list below word for word."],
   ["Spreadsheets","XLSX and XLS come back as CSV."]
 ];
 const REF_FLAG = [
-  ["Wrong language for the code","The text is not in the language of its code, for example Hebrew under a Korean code, Spanish under a Czech code or Russian under a Ukrainian code. Every language is compared with the others that share its alphabet. You can choose the correct code."],
+  ["Wrong language for the code","The text is not in the language of its code, for example Hebrew under a Korean code, Spanish under a Czech code or Russian under a Ukrainian code. Languages that share an alphabet are checked against one another, so Spanish text under a Czech code is caught. Where only a few labels are affected, they are listed by name."],
   ["English left in a label","A label still in English. Copyright lines are listed on their own, as they are often meant to stay."],
   ["Pseudo language issues","XXXX text under a real code, or a label still in English under enIM. Numbers must match the source."],
   ["Tags not closed","<b>, <u> and <i> counted against their closing tags."],
-  ["Module in the config","Must be ecoa, diary, sitetasks or clinros. Anything else, and you are asked which it should be."],
+  ["Module in the config","Must be ecoa, diary, sitetasks or clinros. Anything else, and you are asked which it should be. If the config cannot be read, the module cannot be checked and the file is flagged."],
   ["Site task in the wrong language","Site tasks go to zhCN, jaJP and enIM only. CSSBS and CSSLA go to every language."],
-  ["Language code","Must be readable and one of your 68 approved codes. You can search for the correct code in a list and the file is checked again against it."],
-  ["File shape","A column name used twice, TRANSLATED not last, or a config that cannot be read."]
+  ["Language code","Must be readable and one of your 68 approved codes, even where the file name carries a usable one."],
+  ["Choosing the correct code","When a code is unusable or the whole file does not match it, you pick the right one from a searchable list of the approved codes, and the file is checked again against it."]
 ];
 const refEsc = t => String(t).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
 $("refFix").innerHTML = REF_FIX.map(([a,b]) =>

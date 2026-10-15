@@ -47,7 +47,7 @@ Spreadsheets become `.csv`.
 | Issue | What happens |
 | --- | --- |
 | Text spilled past column E | Rejoined into column E, however many columns it ran across. |
-| Extra columns or a title row | Only `CLIENT`, `CODE`, `ORIGINAL_TEXT`, `LANGUAGE` and `TRANSLATED` come back. The header is found even if rows sit above it. |
+| Extra columns or a title row | Only `CLIENT`, `CODE`, `ORIGINAL_TEXT`, `LANGUAGE` and `TRANSLATED` come back. Any row above the column names, such as the study name, is removed, so only the column names sit at the top. |
 | Quotation marks around a cell | One at the very start and one at the very end of a `TRANSLATED` cell are removed. Quotes inside the sentence are kept. |
 | Language code with a hyphen | `ta-IN` becomes `ta_IN`. |
 | Untranslated validation message | A `TRANSLATED` cell holding one of the eight messages listed below, word for word, is made blank. |
@@ -85,9 +85,9 @@ programmer or the RWS project manager, unless you mark it as expected.
 | Language code not on the approved list | A well-formed code that is not one of the 68 below. Flagged only. |
 | Formatting tag not closed | `<b>`, `<u>` or `<i>` is not matched by its closing tag. The counts on each side are given. |
 | Module needs checking | The module in the configuration is not one of `ecoa`, `diary`, `sitetasks` or `clinros`. |
+| Config could not be read | The configuration cannot be read, even allowing for quotation marks inside labels, so the module cannot be checked. Check the module in the configuration by hand. |
 | Site task not localised into this language | A site task in a language other than `zhCN`, `jaJP` or `enIM`. `CSSBS` and `CSSLA` are expected in every language. |
 | Pseudo language findings | Under `enIM`: a label that still reads as English, or digits that differ from the source. Under any other code: labels made of `XXXX`, meaning the pseudo build went out under the wrong code. The finding says how many labels are affected and, when only some of them are, names them. |
-| File shape | A column name used twice, `TRANSLATED` not being the last column, or a configuration that cannot be read. |
 
 ## Questions the tool asks
 
@@ -101,6 +101,10 @@ When a file's module is not one of the four accepted values, choose `ecoa`, `dia
 value, one answer can be applied to all of them. This is checked by default; clear it to
 answer for that file only. The `modules` entry of the top-level configuration is rewritten,
 and nothing else in it.
+
+If the configuration itself cannot be read, the module cannot be checked, so no question is
+asked. The file is flagged as **Config could not be read** and the configuration is left as
+it was delivered.
 
 ### Language code
 
@@ -192,6 +196,24 @@ Pseudo: `enIM`
 written `esUS`, `es_US` or `es-US`.
 
 </details>
+
+## Hosting and updating
+
+The whole tool is the single file `index.html`. The ZIP and spreadsheet libraries are
+embedded in it, so the page makes no further request once it has loaded. It is published
+with GitHub Pages.
+
+If Pages is set to deploy from a branch, publishing a new version is a matter of replacing
+`index.html` in that branch and committing. It is usually live within a minute, and users
+may need a hard refresh (Ctrl+F5) to clear the cached copy.
+
+To confirm which build is live, compare the file's checksum with the one you recorded:
+
+- Mac or Linux: `shasum -a 256 index.html`
+- Windows: `certutil -hashfile index.html SHA256`
+
+A private repository does not by itself make the published page private. Check the Pages
+visibility setting if that matters.
 
 ## Known limits
 
