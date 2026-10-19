@@ -16,7 +16,7 @@ is stored in the browser.
 1. Open the link and drop in the delivery: a ZIP taken straight from the study folder, or
    individual `.csv`, `.xlsx` or `.xls` files. Each file needs the columns `CODE`,
    `ORIGINAL_TEXT` and `TRANSLATED`. `CLIENT` and `LANGUAGE` are expected as well.
-2. Answer any questions shown at the top of the page (module, language code).
+2. Answer any questions shown at the top of the page (module, language code), then click **Next**.
 3. Select a file to see what was repaired and what was flagged. Mark anything that is
    expected as **Can be ignored**.
 4. Use **Query list** to save the outstanding findings as a CSV to send on.
@@ -94,13 +94,41 @@ programmer or the Translation Vendor project manager, unless you mark it as expe
 Questions appear in a box at the top of the page. They never block anything: **Download**
 works whether or not they have been answered.
 
+### Choosing, saving and ignoring
+
+A choice in the box is only a choice until you click **Next**. **Next** is the one forward button:
+it saves everything you have chosen, across every file, and moves on to the next question that is
+still open. Nothing reaches a file before then, so you can change your mind, go back with
+**Previous**, or start again. With nothing chosen, **Next** simply moves on and saves nothing.
+
+- **Choose** a value by clicking it (or typing it, or picking it from the list). Click the chosen
+  value again to take it back. The box says what is chosen and that it is not saved yet.
+- **Ignore**, beside **Previous**, leaves the tech file as delivered for that question. The
+  finding stays in the query list. Click **Ignored** to undo it; **Next** then closes the question.
+  **Bring back** reopens it afterwards.
+- **Next** with a choice waiting updates the tech file, so the files you download carry the
+  answer. A green note says what was saved.
+- **Undo** takes the last save back. Its answers come out of the tech file, so the files you
+  download are as they were before it, and its questions are asked again with your earlier
+  choices selected. Change them if you like and click **Next** to save again: only then does the
+  output carry the new answers. Each save can be undone in turn, and files added since are kept.
+- **Discard choices** clears everything that has not been saved.
+- Choices that wait to be saved are counted as **unsaved** in the summary and marked **choice not
+  saved** beside the file. They are not in the files you download, and the browser asks before
+  you leave the page with choices waiting.
+
+The box is for changes to the tech file. The **Can be ignored** buttons on the findings further
+down the page are a different thing: they only take a finding off the query list, and never
+change the tech file.
+
 ### Module
 
 When a file's module is not one of the four accepted values, choose `ecoa`, `diary`,
 `sitetasks` or `clinros`, or type another value. Where several files declare the same
 value, one answer can be applied to all of them. This is checked by default; clear it to
-answer for that file only. The `modules` entry of the top-level configuration is rewritten,
-and nothing else in it.
+answer for that file only. A file with a choice of its own, or one you ignored, is never
+changed by someone else's answer. When you click Next, the `modules` entry of the top-level
+configuration is rewritten, and nothing else in it.
 
 If the configuration itself cannot be read, the module cannot be checked, so no question is
 asked. The file is flagged as **Config could not be read** and the configuration is left as
@@ -112,13 +140,18 @@ A question is raised when the `LANGUAGE` value cannot be read, or when the text 
 does not match the code. The dropdown offers the 68 approved codes, each with its language
 and country.
 
-- A **Suggested** group comes first when the tool can guess the right code: the code in the
-  file name, or the codes of the language it recognized in the text.
+- A **Suggested** row of buttons comes first when the tool can guess the right code: the code
+  in the file name, or the codes of the language it recognized in the text. One click chooses it.
+  The list starts on a prompt, so nothing is chosen until you choose it. Typing in the search box
+  narrows the list; when what you type is exactly one code (such as `ko_KR`, `es us` or `korean`),
+  that code appears in the dropdown, selected and chosen. With several matches nothing is chosen
+  for you. Change or clear the text and a code chosen by typing is taken back; press Enter to keep it.
 - The search box narrows the list by code, language or country. `span`, `es us`, `mexico`
   and `czechia` all work.
-- **Set code** writes the chosen code into every row of `LANGUAGE`, and the file is checked
-  again against it. Flags that depended on the old code disappear and the rest remain. If
-  the code you choose still does not fit the text, the question comes back.
+- When you click **Next**, the chosen code is written into every row of `LANGUAGE`, and the
+  file is checked again against it. Flags that depended on the old code disappear and the rest
+  remain. If the code you choose still does not fit the text, the question comes back.
+- If a file also has a module question, both choices are applied by the same Next.
 - Answers already given to a module question are kept, and findings marked as ignorable
   stay ignored.
 

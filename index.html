@@ -217,6 +217,30 @@ button{cursor:pointer}
   .drop h1{font-size:22px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  /* ---- staged choices: Save, Ignore, unsaved ---- */
+  [hidden]{display:none!important}
+  .opt.sel{background:var(--steel);color:#fff}
+  #qcustom.sel{border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft)}
+  .qnav .qign{margin-right:8px}
+  .qnav .ghost.on{background:var(--amber-soft);border-color:var(--amber);color:var(--amber)}
+  .qfoot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px}
+  .qstate{font-size:14px;color:var(--ink2)}
+  .qstate b{color:var(--ink)}
+  .qnote{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);line-height:1.5}
+  .qnote b{color:var(--ink2);font-weight:600}
+  .qsaved{margin:0 0 12px;font-size:14px;font-weight:500;color:var(--teal)}
+  .qbring{margin:10px 0 0}
+  .qlab{font-size:13px;color:var(--ink3);margin-right:2px}
+  .qsug{margin-bottom:10px}
+  .s.pend{background:var(--steel-soft);color:var(--steel);padding:1px 7px;border-radius:4px;font-weight:500}
+  .t-unsaved b{color:var(--steel)}
+  .qbecause{font-weight:400;color:var(--ink2)}
+  .qtopnote{margin:0 0 14px;font-size:13px;color:var(--ink3);line-height:1.5}
+  .qtopnote b{color:var(--ink2);font-weight:600}
+  .findnote{margin:0;padding:11px 16px 0;font-size:13px;color:var(--ink3);line-height:1.5}
+  .findnote b{color:var(--ink2);font-weight:600}
+  #qsearch{min-width:250px}
 </style>
 
 <div class="bar">
@@ -262,6 +286,7 @@ button{cursor:pointer}
           </div>
           <button class="ghost" id="dl1">Download this file</button>
         </div>
+        <p class="findnote">In the ‘To clarify with the study programmer or Translation Vendor PM’ section, the <b>Can be ignored</b> buttons only take a finding off the query list. The rest of the flags are in the query list.</p>
         <div id="detail"><p class="none">Pick a file to see what changed.</p></div>
       </div>
     </div>
@@ -982,7 +1007,7 @@ function analyse(name, headers, rows, overflow, wasXlsx, shape){
         const dc = APPROVED_CODES.filter(a => langKey(a) === hit.detected);
         if(dc.length && dc.length <= 3) dc.forEach(a => { const f = toFileForm(a); if(!suggestions.includes(f)) suggestions.push(f); });
       }
-      langAsk = { current: rawLocale || (locale ? toFileForm(locale) : ""), reason, suggestions };
+      langAsk = { current: rawLocale || (locale ? toFileForm(locale) : ""), reason, suggestions, cause: hit.rule === "Language code not recognised" ? "code" : "text" };
     }
   }
 
@@ -1183,25 +1208,188 @@ const RULE_HELP = {
 
 let FILTER = "all", QUERY = "", OPEN = {}, QIDX = 0;
 const IGNORED = new Set();
+/* Choices made in the question box wait here. Nothing reaches a file until Save is clicked,
+   so every choice can be changed, undone or ignored first. */
+const STAGED = new Map();   /* file -> { module:{mode:"set"|"skip",value}, language:{mode,value} } */
+const SAME = new Map();     /* file -> whether a module value is also applied to the files that said the same */
+let SAVED_NOTE = "", QSEARCH = "", REFOCUS = "";
+const HISTORY = [];         /* one entry per Save: what the files looked like before it, so Undo can put it back */
 /* a key that survives re-rendering and reordering */
 const fid = (f, x) => (f.name || "") + "|" + x.rule + "|" + (x.code || "") + "|" + String(x.tgt ?? x.before ?? "").slice(0,40);
 const isIgnored = (f, x) => IGNORED.has(fid(f, x));
 const openFlags = f => f.error ? 0 : f.findings.filter(x => x.act === "flag" && !isIgnored(f, x)).length;
 const ignoredCount = f => f.error ? 0 : f.findings.filter(x => x.act === "flag" && isIgnored(f, x)).length;
 
+function skipped(f, kind){
+  const a = (f && f.answers) || {};
+  return kind === "language" ? !!a.skipLanguage : !!a.skipModule;
+}
 function pendingQuestions(){
   const out = [];
   FILES.forEach(f => {
     if(f.error) return;
-    if(f.langAsk) out.push({ f, kind: "language" });
-    if(f.ask) out.push({ f, kind: "module" });
+    if(f.langAsk && !skipped(f, "language")) out.push({ f, kind: "language" });
+    if(f.ask && !skipped(f, "module")) out.push({ f, kind: "module" });
   });
   return out;
+}
+function skippedCount(){
+  return FILES.reduce((a, f) => a + (f.error ? 0 : ((f.langAsk && skipped(f, "language") ? 1 : 0) + (f.ask && skipped(f, "module") ? 1 : 0))), 0);
+}
+function reopenSkipped(){
+  FILES.forEach(f => { if(f.answers){ delete f.answers.skipLanguage; delete f.answers.skipModule; } });
+  SAVED_NOTE = ""; QIDX = 0; QSEARCH = ""; render();
+}
+
+/* ---- staged choices ---- */
+function choiceOf(f, kind){ const s = STAGED.get(f); return s && s[kind] ? s[kind] : null; }
+function unstage(f, kind){
+  const s = STAGED.get(f); if(!s) return;
+  delete s[kind]; if(!s.module && !s.language) STAGED.delete(f);
+}
+function stageSet(f, kind, value, auto){
+  const v = String(value || "").trim();
+  if(!v){ unstage(f, kind); return; }
+  const s = STAGED.get(f) || {}; s[kind] = { mode: "set", value: v, auto: !!auto }; STAGED.set(f, s); SAVED_NOTE = "";
+}
+function stageSkip(f, kind){
+  const s = STAGED.get(f) || {}; s[kind] = { mode: "skip" }; STAGED.set(f, s); SAVED_NOTE = "";
+}
+function toggleChoice(f, kind, value){
+  const st = choiceOf(f, kind);
+  if(st && st.mode === "set" && st.value === value) unstage(f, kind); else stageSet(f, kind, value);
+}
+function pruneStaged(){   /* a choice only counts while its question is still open */
+  Array.from(STAGED.keys()).forEach(f => {
+    if(!FILES.includes(f)){ STAGED.delete(f); return; }
+    if(!(f.langAsk && !skipped(f, "language"))) unstage(f, "language");
+    if(!(f.ask && !skipped(f, "module"))) unstage(f, "module");
+  });
+}
+function stagedCount(){
+  let n = 0; STAGED.forEach(s => { if(s.module) n++; if(s.language) n++; }); return n;
+}
+function discardStaged(){ STAGED.clear(); SAVED_NOTE = ""; QSEARCH = ""; render(); }
+
+/* applying an answer: the same steps as before, without drawing the page */
+function applyModuleAnswer(fileIdx, value, alsoSameValue, keep){
+  const f = FILES[fileIdx];
+  if(!f || !f.ask) return false;
+  const same = f.ask.current;
+  setModule(fileIdx, value);
+  if(alsoSameValue){
+    FILES.forEach((o, i) => {
+      if(o !== f && !o.error && o.ask && !skipped(o, "module") && o.ask.current === same && !(keep && keep.has(o))) setModule(i, value);
+    });
+  }
+  return true;
+}
+function answerModule(fileIdx, value, alsoSameValue){
+  if(applyModuleAnswer(fileIdx, value, alsoSameValue)){ QIDX = 0; render(); }
+}
+
+/* ---- Undo: put the files back as they were before the last Save, and ask the questions again ---- */
+function takeSnapshot(){
+  const copy = x => JSON.parse(JSON.stringify(x));
+  const staged = new Map(); STAGED.forEach((s, f) => staged.set(f, copy(s)));
+  return { files: FILES.slice(), staged,
+    states: FILES.filter(f => !f.error).map(f => ({ f, rows: copy(f.rows), findings: copy(f.findings), ask: f.ask ? copy(f.ask) : null,
+      answers: copy(f.answers || {}), fixed: f.fixed, review: f.review })) };
+}
+function undoSave(){
+  const snap = HISTORY.pop();
+  if(!snap) return;
+  const added = FILES.slice(snap.files.length);              /* files uploaded since that Save are kept */
+  FILES.length = 0; snap.files.forEach(o => FILES.push(o)); added.forEach(o => FILES.push(o));
+  snap.states.forEach(st => { const f = st.f; f.rows = st.rows; f.findings = st.findings; f.ask = st.ask; f.answers = st.answers; f.fixed = st.fixed; f.review = st.review; });
+  const back = new Map(); snap.staged.forEach((s, f) => back.set(f, s));      /* the choices that were saved come back, to be edited */
+  const original = new Map(); (snap.replaced || new Map()).forEach((now, was) => original.set(now, was));   /* a re-checked file comes back as the file it was */
+  STAGED.forEach((s, g) => { const f = original.get(g) || g, b = back.get(f); if(!b) back.set(f, s); else { if(!b.module && s.module) b.module = s.module; if(!b.language && s.language) b.language = s.language; } });
+  STAGED.clear(); back.forEach((s, f) => STAGED.set(f, s));
+  SAVED_NOTE = "Undone. The answers are out of the tech file and the questions are open again, with your earlier choices selected. Change them if you like, then click Next to save again.";
+  QIDX = 0; QSEARCH = ""; render();
+}
+
+/* Save: every staged choice, in every file, in one go. Language codes first, because they run every check
+   again from the source (and keep any module answer already given); then module values; then the ignored. */
+function saveStaged(){
+  pruneStaged();
+  const q0 = pendingQuestions(), here = Math.min(QIDX, q0.length - 1);
+  const key = it => FILES.indexOf(it.f) + ":" + it.kind;            /* file position + kind: the same question before and after a re-check */
+  const order = new Map(q0.map((it, i) => [key(it), i]));
+  const items = q0.map(x => ({ f: x.f, kind: x.kind, st: choiceOf(x.f, x.kind) })).filter(x => x.st);
+  if(!items.length) return false;
+  const snap = takeSnapshot();
+  const latest = new Map(), cur = f => latest.get(f) || f;
+  let applied = 0, left = 0; const failed = [];
+  items.filter(x => x.kind === "language" && x.st.mode === "set").forEach(x => {
+    const i = FILES.indexOf(cur(x.f)); if(i < 0) return;
+    const r = applyLanguageAnswer(i, x.st.value);
+    if(r.ok){ latest.set(x.f, FILES[i]); applied++; } else failed.push(r.msg || "A language code could not be applied.");
+  });
+  const own = new Set(items.filter(x => x.kind === "module").map(x => cur(x.f)));
+  items.filter(x => x.kind === "module" && x.st.mode === "set").forEach(x => {
+    const i = FILES.indexOf(cur(x.f)); if(i < 0) return;
+    if(applyModuleAnswer(i, x.st.value, SAME.get(x.f) !== false, own)) applied++;
+  });
+  items.filter(x => x.st.mode === "skip").forEach(x => {
+    const f = cur(x.f); f.answers = Object.assign({}, f.answers, x.kind === "language" ? { skipLanguage: true } : { skipModule: true }); left++;
+  });
+  STAGED.clear(); QSEARCH = "";
+  if(applied || left){ snap.replaced = latest; HISTORY.push(snap); if(HISTORY.length > 20) HISTORY.shift(); }
+  const q1 = pendingQuestions(), nextOpen = q1.findIndex(it => (order.has(key(it)) ? order.get(key(it)) : here) > here);
+  QIDX = nextOpen >= 0 ? nextOpen : 0;                                /* on to the next question that is still open, else back to the first */
+  SAVED_NOTE = "Saved. " + (applied ? `${applied} ${applied === 1 ? "choice" : "choices"} applied to the tech files` : "No choices applied")
+    + (left ? `, ${left} left as delivered` : "") + "." + (failed.length ? " " + failed.join(" ") : "");
+  render();
+  return true;
+}
+/* Next: it saves what is waiting and moves on; with nothing waiting it just moves on */
+function goNext(q){
+  if(stagedCount() > 0 && saveStaged()) return;
+  QIDX = (QIDX + 1) % q.length; SAVED_NOTE = ""; QSEARCH = ""; render();
+}
+
+/* why the open questions are open, in the heading */
+function causeText(q){
+  const c = new Set();
+  q.forEach(it => c.add(it.kind === "module" ? "module" : (it.f.langAsk && it.f.langAsk.cause === "text" ? "text" : "code")));
+  const parts = [];
+  if(c.has("module") && c.has("code")) parts.push("the module/language code did not match the approved list");
+  else if(c.has("module")) parts.push("the module did not match the approved list");
+  else if(c.has("code")) parts.push("the language code did not match the approved list");
+  if(c.has("text")) parts.push("the text did not match the language code");
+  return parts.join(" and ");
+}
+function stateHtml(f, kind){
+  const st = choiceOf(f, kind), others = stagedCount() - (st ? 1 : 0);
+  const more = others > 0 ? ` ${others} other ${others === 1 ? "choice waits" : "choices wait"}; Next saves them all.` : "";
+  if(st && st.mode === "skip") return `<b>Ignored.</b> Next leaves the tech file as delivered; the finding stays in the query list.${more}`;
+  if(st) return `Chosen: <b class="mono">${esc(st.value)}</b>. Not saved yet: click Next to save it.${more}`;
+  return `No choice yet. Next skips this question for now.${more}`;
+}
+/* the light update used while typing or picking: no redraw, so focus and typed text stay put */
+function refreshQueue(f, kind){
+  const st = choiceOf(f, kind), n = stagedCount();
+  const chosen = st && st.mode === "set" ? st.value : "", ign = !!(st && st.mode === "skip");
+  if($("qstate")) $("qstate").innerHTML = stateHtml(f, kind);
+  const nx = $("qnext"); if(nx){ nx.disabled = !(pendingQuestions().length >= 2 || n > 0); nx.title = n ? "Saves your choices and moves to the next question" : "Next question (nothing is saved)"; }
+  const dc = $("qdiscard"); if(dc) dc.hidden = !n;
+  const ig = $("qignore"); if(ig){ ig.textContent = ign ? "Ignored" : "Ignore"; ig.classList.toggle("on", ign); ig.setAttribute("aria-pressed", String(ign)); }
+  $("queue").querySelectorAll(".opt[data-m], .opt[data-code]").forEach(b => {
+    const on = !!chosen && (b.dataset.m === chosen || b.dataset.code === chosen);
+    b.classList.toggle("sel", on); b.setAttribute("aria-pressed", String(on));
+  });
+  const cu = $("qcustom"); if(cu) cu.classList.toggle("sel", !!chosen && !APPROVED_MODULES.includes(chosen));
+  const tu = $("tunsaved"); if(tu){ tu.hidden = !n; if($("tunsavedn")) $("tunsavedn").textContent = n; }
+}
+if(typeof window !== "undefined" && typeof window.addEventListener === "function"){
+  window.addEventListener("beforeunload", e => { if(stagedCount() > 0){ e.preventDefault(); e.returnValue = ""; } });
 }
 
 function moduleGroups(){
   const g = {};
-  FILES.filter(f => !f.error && f.ask).forEach(f => {
+  FILES.filter(f => !f.error && f.ask && !skipped(f, "module")).forEach(f => {
     const k = f.ask.current || "(none)";
     (g[k] = g[k] || []).push(f);
   });
@@ -1209,19 +1397,6 @@ function moduleGroups(){
 }
 
 /* answer one file, or every file that currently shows the same module value */
-function answerModule(fileIdx, value, alsoSameValue){
-  const f = FILES[fileIdx];
-  if(!f || !f.ask) return;
-  const same = f.ask.current;
-  setModule(fileIdx, value);
-  if(alsoSameValue){
-    FILES.forEach((o, i) => {
-      if(o !== f && !o.error && o.ask && o.ask.current === same) setModule(i, value);
-    });
-  }
-  QIDX = 0;
-  render();
-}
 
 /* Supplying a language code changes which checks apply, so the file is analysed again from its
    original input. Earlier answers are kept, and the code replaces the LANGUAGE value in every row. */
@@ -1256,24 +1431,25 @@ function filterCodes(query){
     return toks.every(t => key.includes(t) || words.some(w => w.startsWith(t)));
   });
 }
-function langOptions(sug, query){
-  const opt = a => { const c = toFileForm(a); return `<option value="${esc(c)}">${esc(c)} \u2014 ${esc(displayName(a) || "")}</option>`; };
+function langOptions(sug, query, selected){
+  const sel = selected ? keyOf(selected) : "";
+  const opt = a => { const c = toFileForm(a); return `<option value="${esc(c)}"${sel && keyOf(a) === sel ? " selected" : ""}>${esc(c)} \u2014 ${esc(displayName(a) || "")}</option>`; };
+  const ph = `<option value="" disabled${sel ? "" : " selected"}>Choose the correct code\u2026</option>`;
   const q = normSearch(query);
   if(!q){
     const sugOpts = (sug || []).map(c => { const a = APPROVED_CODES.find(x => keyOf(x) === keyOf(c)); return a ? opt(a) : ""; }).join("");
-    return ((sug || []).length ? "" : `<option value="" selected disabled>Choose the correct code\u2026</option>`)
-      + ((sug || []).length ? `<optgroup label="Suggested">${sugOpts}</optgroup>` : "")
+    return ph + ((sug || []).length ? `<optgroup label="Suggested">${sugOpts}</optgroup>` : "")
       + `<optgroup label="All approved codes">${APPROVED_CODES.map(opt).join("")}</optgroup>`;
   }
   const m = filterCodes(query);
   if(!m.length) return `<option value="" selected disabled>No code matches \u201c${esc(String(query).trim())}\u201d</option>`;
   const first = new Set((sug || []).map(keyOf));
   const ordered = m.filter(a => first.has(keyOf(a))).concat(m.filter(a => !first.has(keyOf(a))));
-  return `<optgroup label="${m.length} match${m.length === 1 ? "" : "es"}">${ordered.map(opt).join("")}</optgroup>`;
+  return ph + `<optgroup label="${m.length} match${m.length === 1 ? "" : "es"}">${ordered.map(opt).join("")}</optgroup>`;
 }
 
 /* returns { ok:true } or { ok:false, msg } so the question can explain a refusal */
-function answerLanguage(fileIdx, raw){
+function applyLanguageAnswer(fileIdx, raw){
   const f = FILES[fileIdx];
   if(!f || !f.langAsk || !f._src) return { ok: false, msg: "" };
   const text = String(raw || "").trim();
@@ -1283,9 +1459,12 @@ function answerLanguage(fileIdx, raw){
   const hit = APPROVED_CODES.find(a => keyOf(a) === keyOf(c));
   if(!hit) return { ok: false, msg: `${toFileForm(c)} is not on the approved list, so it cannot be used.` };
   FILES[fileIdx] = reanalyse(f, toFileForm(hit));
-  QIDX = 0;
-  render();
   return { ok: true };
+}
+function answerLanguage(fileIdx, raw){
+  const r = applyLanguageAnswer(fileIdx, raw);
+  if(r.ok){ QIDX = 0; render(); }
+  return r;
 }
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -1329,6 +1508,7 @@ function render(){
   const flags = ok.reduce((a,f) => a + openFlags(f), 0);
   const ignored = ok.reduce((a,f) => a + ignoredCount(f), 0);
   const bad = FILES.filter(f => f.error).length;
+  pruneStaged();
   const q = pendingQuestions();
 
   $("dl").textContent = "Download " + archiveName();
@@ -1337,78 +1517,126 @@ function render(){
   $("queries").disabled = !anyQuery;
   $("queries").title = anyQuery ? "Save the queries as a CSV to send on" : "No queries to raise";
 
-  /* ---- decision queue: the only thing that needs a person ---- */
+  /* ---- decision queue: choices wait here and reach the files only on Save ---- */
   const qb = $("queue");
+  const nStaged = stagedCount(), nSkipped = skippedCount();
+  const savedNote = SAVED_NOTE ? `<p class="qsaved" role="status">${esc(SAVED_NOTE)}</p>` : "";
+  const topNote = `<p class="qtopnote"><b>This box changes the tech file</b>, and only when you click <b>Next</b>, which saves your choice and moves on. <b>Undo</b> takes the last save back and asks its questions again. <b>Ignore</b> here leaves the tech file as delivered.</p>`;
+  const bringBack = nSkipped ? `<p class="qbring"><button class="link" id="qreopen">Bring back ${nSkipped} ignored ${nSkipped===1?"question":"questions"}</button></p>` : "";
   if(!q.length){
     qb.className = "queue done";
-    qb.innerHTML = `<div class="qdone"><strong>Nothing left to decide.</strong>
+    qb.innerHTML = `${topNote}${savedNote}<div class="qdone"><strong>Nothing left to decide from you.</strong>
       ${fixes} ${fixes===1?"repair":"repairs"} applied across ${ok.length} ${ok.length===1?"file":"files"}.
-      ${flags ? flags + " " + (flags===1?"query":"queries") + " to raise before these go in." : ""}</div>`;
+      ${flags ? flags + " " + (flags===1?"query":"queries") + " to raise with the study programmer or Translation Vendor PM before these go in." : ""}</div>
+      ${HISTORY.length ? `<div class="qfoot"><button class="ghost" id="qundo" title="Undo the last save: its answers come out of the tech file and the questions are asked again">Undo</button></div>` : ""}${bringBack}`;
+    if($("qreopen")) $("qreopen").onclick = () => reopenSkipped();
+    if($("qundo")) $("qundo").onclick = () => undoSave();
   }else{
     if(QIDX >= q.length) QIDX = 0;
-    const item = q[QIDX], cur = item.f;
+    const item = q[QIDX], cur = item.f, kind = item.kind;
+    const st = choiceOf(cur, kind), chosen = st && st.mode === "set" ? st.value : "", ign = !!(st && st.mode === "skip");
     qb.className = "queue";
-    const head = `
+    const head = `${savedNote}
       <div class="qhead">
-        <h2>${q.length} ${q.length===1?"question needs":"questions need"} an answer</h2>
+        <h2>${q.length} ${q.length===1?"question needs":"questions need"} an answer <span class="qbecause">because ${esc(causeText(q))}</span></h2>
         <div class="qnav">
+          <button class="ghost qign${ign?" on":""}" id="qignore" aria-pressed="${ign}" title="Leave the tech file as delivered for this question">${ign?"Ignored":"Ignore"}</button>
           <button class="ghost" id="qprev" ${q.length<2?"disabled":""} aria-label="Previous question">Previous</button>
           <span class="qcount">${QIDX+1} of ${q.length}</span>
-          <button class="ghost" id="qnext" ${q.length<2?"disabled":""} aria-label="Next question">Next</button>
+          <button class="ghost" id="qnext" ${(q.length<2 && !nStaged)?"disabled":""} title="${nStaged ? "Saves your choices and moves to the next question" : "Next question (nothing is saved)"}" aria-label="Next question">Next</button>
         </div>
-      </div>`;
-    if(item.kind === "module"){
+      </div>
+      ${topNote}`;
+    const foot = `
+      <div class="qfoot">
+        <button class="ghost" id="qundo" ${HISTORY.length?"":"disabled"} title="Undo the last save: its answers come out of the tech file and the questions are asked again">Undo</button>
+        <button class="link" id="qdiscard" ${nStaged?"":"hidden"}>Discard choices</button>
+        <span class="qstate" id="qstate" aria-live="polite">${stateHtml(cur, kind)}</span>
+      </div>
+      ${bringBack}`;
+    if(kind === "module"){
       const groups = moduleGroups();
       const val = cur.ask.current || "(not set)";
       const peers = (groups[cur.ask.current || "(none)"] || []).length;
+      const custom = chosen && !APPROVED_MODULES.includes(chosen) ? chosen : "";
       qb.innerHTML = head + `
       <p class="qfile"><span class="mono">${esc(cur.outName || cur.name)}</span> says
         <span class="pill">${esc(val)}</span>, which is not one of the modules the system accepts (${esc(APPROVED_MODULES.join(", "))}).</p>
       <div class="qopts">
-        ${APPROVED_MODULES.map(m => `<button class="opt" data-m="${m}">${m}</button>`).join("")}
-        <input id="qcustom" type="text" placeholder="or type another value" aria-label="Custom module name">
-        <button class="ghost" id="qapply">Set</button>
+        ${APPROVED_MODULES.map(m => `<button class="opt${chosen===m?" sel":""}" data-m="${m}" aria-pressed="${chosen===m}">${m}</button>`).join("")}
+        <input id="qcustom" type="text" class="${custom?"sel":""}" value="${esc(custom)}" placeholder="or type another value" aria-label="Custom module name">
       </div>
-      ${peers > 1 ? `<label class="qall"><input type="checkbox" id="qsame" checked>
-        Apply to all ${peers} files that say <span class="mono">${esc(val)}</span></label>` : ""}`;
-      const same = () => { const c = $("qsame"); return c ? c.checked : false; };
-      qb.querySelectorAll(".opt").forEach(b => b.onclick = () => answerModule(FILES.indexOf(cur), b.dataset.m, same()));
-      $("qapply").onclick = () => { const v = $("qcustom").value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); };
-      $("qcustom").onkeydown = e => { if(e.key === "Enter"){ const v = e.target.value.trim(); if(v) answerModule(FILES.indexOf(cur), v, same()); } };
+      ${peers > 1 ? `<label class="qall"><input type="checkbox" id="qsame" ${SAME.get(cur)===false?"":"checked"}>
+        Apply to all ${peers} files that say <span class="mono">${esc(val)}</span></label>` : ""}` + foot;
+      qb.querySelectorAll(".opt[data-m]").forEach(b => b.onclick = () => { toggleChoice(cur, "module", b.dataset.m); REFOCUS = `.opt[data-m="${b.dataset.m}"]`; render(); });
+      $("qcustom").oninput = () => {
+        const v = $("qcustom").value.trim(), prev = choiceOf(cur, "module");
+        if(v) stageSet(cur, "module", v); else if(prev && prev.mode === "set" && !APPROVED_MODULES.includes(prev.value)) unstage(cur, "module");
+        refreshQueue(cur, "module");
+      };
+      $("qcustom").onkeydown = e => { if(e.key === "Enter"){ if(e.preventDefault) e.preventDefault(); if($("qnext") && !$("qnext").disabled && $("qnext").focus) $("qnext").focus(); } };
+      if($("qsame")) $("qsame").onchange = () => SAME.set(cur, $("qsame").checked);
     }else{
       const la = cur.langAsk, sug = la.suggestions || [];
+      const sugCodes = sug.map(c => { const a2 = APPROVED_CODES.find(x => keyOf(x) === keyOf(c)); return a2 ? toFileForm(a2) : null; }).filter(Boolean);
       qb.innerHTML = head + `
       <p class="qfile"><span class="mono">${esc(cur.outName || cur.name)}</span> may have the wrong language code: ${esc(la.reason)}.</p>
-      <p class="qhelp">Loading it under the wrong code would overwrite another language. Choose the correct code and the file is checked again against it.</p>
+      <p class="qhelp">Loading it under the wrong code would overwrite another language. Choose the correct code and, once you click Next, the file is checked again against it.</p>
+      ${sugCodes.length ? `<div class="qopts qsug"><span class="qlab">Suggested</span>${sugCodes.map(c => `<button class="opt${chosen===c?" sel":""}" data-code="${esc(c)}" aria-pressed="${chosen===c}">${esc(c)}</button>`).join("")}</div>` : ""}
       <div class="qopts">
-        <input id="qsearch" type="search" placeholder="Search by code or language" aria-label="Search language codes" autocomplete="off">
-        <select id="qlang" aria-label="Correct language code">${langOptions(sug, "")}</select>
-        <button class="ghost" id="qlangset">Set code</button>
+        <input id="qsearch" type="search" value="${esc(QSEARCH)}" placeholder="Search by code or language" aria-label="Search language codes" autocomplete="off">
+        <select id="qlang" aria-label="Correct language code">${langOptions(sug, QSEARCH, chosen)}</select>
         <span class="qhint" id="qhint" aria-live="polite"></span>
       </div>
-      <p class="qerr" id="qerr" role="alert"></p>`;
-      const go = v => { const res = answerLanguage(FILES.indexOf(cur), v); if(!res.ok && $("qerr")) $("qerr").textContent = res.msg; };
-      $("qsearch").oninput = () => {
-        const text = $("qsearch").value, n = filterCodes(text).length;
-        $("qlang").innerHTML = langOptions(sug, text);
-        $("qhint").textContent = normSearch(text) ? (n ? `${n} match${n === 1 ? "" : "es"}` : "No match") : "";
+      <p class="qerr" id="qerr" role="alert"></p>` + foot;
+      const hint = (text, picked) => {
+        const n = filterCodes(text).length;
+        $("qhint").textContent = !normSearch(text) ? "" : (!n ? "No match" : (picked ? (n === 1 ? "1 match, selected" : `${n} matches, ${picked} selected`) : `${n} match${n === 1 ? "" : "es"}`));
       };
-      $("qsearch").onkeydown = e => { if(e.key === "Enter"){ if(e.preventDefault) e.preventDefault(); if($("qlang").value) go($("qlang").value); } };
-      $("qlangset").onclick = () => go($("qlang").value);
+      const ch0 = choiceOf(cur, "language");
+      hint(QSEARCH, ch0 && ch0.mode === "set" && ch0.auto ? ch0.value : "");
+      qb.querySelectorAll(".opt[data-code]").forEach(b => b.onclick = () => { toggleChoice(cur, "language", b.dataset.code); REFOCUS = `.opt[data-code="${b.dataset.code}"]`; render(); });
+      $("qsearch").oninput = () => {
+        QSEARCH = $("qsearch").value;
+        const before = choiceOf(cur, "language"), c = canonical(QSEARCH), m = filterCodes(QSEARCH);
+        const exact = c && typeof c !== "string" ? c : null;                       /* what was typed is exactly an approved code */
+        const pick = normSearch(QSEARCH) ? (exact || (m.length === 1 ? m[0] : null)) : null;   /* ...or it narrows the list to one */
+        if(pick) stageSet(cur, "language", toFileForm(pick), true);
+        else if(before && before.mode === "set" && before.auto) unstage(cur, "language");   /* a code chosen by typing goes when the text no longer picks it */
+        const now = choiceOf(cur, "language");
+        $("qlang").innerHTML = langOptions(sug, QSEARCH, now && now.mode === "set" ? now.value : "");
+        hint(QSEARCH, pick ? toFileForm(pick) : "");
+        refreshQueue(cur, "language");
+      };
+      $("qsearch").onkeydown = e => {
+        if(e.key === "Enter"){
+          if(e.preventDefault) e.preventDefault();
+          if($("qlang").value){ stageSet(cur, "language", $("qlang").value); refreshQueue(cur, "language"); if($("qnext") && !$("qnext").disabled && $("qnext").focus) $("qnext").focus(); }
+        }
+      };
+      $("qlang").onchange = () => { if($("qlang").value){ stageSet(cur, "language", $("qlang").value); refreshQueue(cur, "language"); } };
     }
-    $("qprev").onclick = () => { QIDX = (QIDX - 1 + q.length) % q.length; render(); };
-    $("qnext").onclick = () => { QIDX = (QIDX + 1) % q.length; render(); };
+    if($("qreopen")) $("qreopen").onclick = () => reopenSkipped();
+    $("qignore").onclick = () => { if(ign) unstage(cur, kind); else stageSkip(cur, kind); REFOCUS = "#qignore"; render(); };
+    $("qundo").onclick = () => undoSave();
+    $("qdiscard").onclick = () => discardStaged();
+    $("qprev").onclick = () => { QIDX = (QIDX - 1 + q.length) % q.length; SAVED_NOTE = ""; QSEARCH = ""; render(); };
+    $("qnext").onclick = () => goNext(q);
+    if(REFOCUS){ const el = qb.querySelector(REFOCUS); REFOCUS = ""; if(el && el.focus) el.focus(); }
   }
 
   /* ---- tallies ---- */
   $("tally").innerHTML = `
     <span class="t t-fix"><b>${fixes}</b> repaired</span>
-    <span class="t t-flag"><b>${flags}</b> to clarify</span>
+    <span class="t t-flag"><b>${flags}</b> in query list</span>
     ${ignored ? `<span class="t t-ign"><b>${ignored}</b> ignored</span>` : ""}
     <span class="t"><b>${ok.length}</b> ${ok.length===1?"file":"files"} ready</span>
+    <span class="t t-unsaved" id="tunsaved" ${stagedCount()?"":"hidden"}><b id="tunsavedn">${stagedCount()}</b> unsaved</span>
     ${bad ? `<span class="t t-bad"><b>${bad}</b> unreadable</span>` : ""}`;
 
   /* ---- file list ---- */
+  const pendSet = new Set(q.map(x => x.f));
+  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.f === FILTER));   /* the tabs always show the filter in use, so Show all lands on All */
   const list = visibleFiles();
   $("fcount").textContent = list.length === FILES.length
     ? `${FILES.length} ${FILES.length===1?"file":"files"}`
@@ -1426,10 +1654,10 @@ function render(){
     const bits = [];
     if(f.error) bits.push(`<span class="s bad">could not be read</span>`);
     else{
-      if(f.ask) bits.push(`<span class="s ask">needs an answer</span>`);
+      if(pendSet.has(f)) bits.push(STAGED.has(f) ? `<span class="s pend">choice not saved</span>` : `<span class="s ask">needs an answer</span>`);
       if(f.fixed) bits.push(`<span class="s fix">${f.fixed} repaired</span>`);
       const of_ = openFlags(f), ig = ignoredCount(f);
-      if(of_) bits.push(`<span class="s flag">${of_} to clarify</span>`);
+      if(of_) bits.push(`<span class="s flag">${of_} in query list</span>`);
       if(ig) bits.push(`<span class="s ign">${ig} ignored</span>`);
       if(!f.fixed && !of_ && !ig) bits.push(`<span class="s ok">nothing to change</span>`);
     }
@@ -1566,7 +1794,7 @@ $("dl").onclick = async () => {
 };
 $("reset").onclick = () => {
   FILES = []; SEL = -1; SRC_ZIPS = []; SRC_FILES = [];
-  FILTER = "all"; QUERY = ""; OPEN = {}; QIDX = 0; IGNORED.clear();
+  FILTER = "all"; QUERY = ""; OPEN = {}; QIDX = 0; IGNORED.clear(); STAGED.clear(); SAME.clear(); HISTORY.length = 0; SAVED_NOTE = ""; QSEARCH = "";
   $("search").value = ""; $("inp").value = "";
   document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.f === "all"));
   render();
