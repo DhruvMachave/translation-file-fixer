@@ -16,9 +16,10 @@ is stored in the browser.
 1. Open the link and drop in the delivery: a ZIP taken straight from the study folder, or
    individual `.csv`, `.xlsx` or `.xls` files. Each file needs the columns `CODE`,
    `ORIGINAL_TEXT` and `TRANSLATED`. `CLIENT` and `LANGUAGE` are expected as well.
-2. Answer any questions shown at the top of the page (module, language code), then click **Next**.
-3. Select a file to see what was repaired and what was flagged. Mark anything that is
-   expected as **Can be ignored**.
+2. Select a file to see what was repaired and what was flagged. A finding that needs an answer
+   (the module, the language code) has a **Suggestion** window under it: choose a value and
+   click **Save**, or click **Ignore**.
+3. Mark anything else that is expected as **Can be ignored**.
 4. Use **Query list** to save the outstanding findings as a CSV to send on.
 5. Use **Download** to save the corrected files.
 
@@ -91,35 +92,42 @@ programmer or the Translation Vendor project manager, unless you mark it as expe
 
 ## Questions the tool asks
 
-Questions appear in a box at the top of the page. They never block anything: **Download**
-works whether or not they have been answered.
+A question is not a separate box. It sits in a **Suggestion** window under the finding it belongs
+to: the module question under *Module needs checking*, and the language-code question under
+*Language code not recognised* (or, where the text does not fit the code, under the first of the
+findings that say so). A one-line banner at the top of the page counts the open questions and says
+why they are open. Questions never block anything: **Download** works whether or not they have
+been answered.
 
 ### Choosing, saving and ignoring
 
-A choice in the box is only a choice until you click **Next**. **Next** is the one forward button:
-it saves everything you have chosen, across every file, and moves on to the next question that is
-still open. Nothing reaches a file before then, so you can change your mind, go back with
-**Previous**, or start again. With nothing chosen, **Next** simply moves on and saves nothing.
+A choice in a window is only a choice until you click that window's **Save**. Nothing reaches a
+file before then, so you can change your mind first.
 
 - **Choose** a value by clicking it (or typing it, or picking it from the list). Click the chosen
-  value again to take it back. The box says what is chosen and that it is not saved yet.
-- **Ignore**, beside **Previous**, leaves the tech file as delivered for that question. The
-  finding stays in the query list. Click **Ignored** to undo it; **Next** then closes the question.
-  **Bring back** reopens it afterwards.
-- **Next** with a choice waiting updates the tech file, so the files you download carry the
-  answer. A green note says what was saved.
-- **Undo** takes the last save back. Its answers come out of the tech file, so the files you
-  download are as they were before it, and its questions are asked again with your earlier
-  choices selected. Change them if you like and click **Next** to save again: only then does the
-  output carry the new answers. Each save can be undone in turn, and files added since are kept.
-- **Discard choices** clears everything that has not been saved.
+  value again to take it back. The window says what is chosen and that it is not saved yet.
+- **Save** applies that one choice to the tech file, so the files you download carry it. Other
+  choices that are still waiting are not saved by it; the window says so.
+- **Ignore** leaves the tech file as delivered **and takes the finding off the query list**. The
+  finding stays listed, greyed. *Bring the suggestion back* reverses both.
+- A finding that has a Suggestion has no **Can be ignored** button, and its group has no **Ignore
+  all**: the **Ignore** in the window is the only way to ignore it. Findings without a Suggestion
+  keep both, and there **Can be ignored** only takes the finding off the query list. Where
+  several findings describe the same wrong language code, only the one carrying the Suggestion is
+  ignored by it.
+- **Undo** is not shown until something has been saved. After a **Save**, the repair it made (for
+  example *Module set to diary*) says "Saved. Undo takes it back and asks the question again".
+  It appears only under what the last save changed, and takes that save back: the files you
+  download are as they were before it, and the question comes back with your earlier choice
+  selected. Change it if you like and click **Save** again. Each save can be undone in turn, and
+  files added since are kept.
+- The green note above the findings is a running total: *Saved. 1 choice applied*, then *2
+  choices*, *3 choices* and so on as you save more, with ", N left as delivered" when some were
+  ignored. Undo takes its choices off the total, and *Bring the suggestion back* takes an ignored
+  one off the "left as delivered" count. Start over begins again at 1.
 - Choices that wait to be saved are counted as **unsaved** in the summary and marked **choice not
   saved** beside the file. They are not in the files you download, and the browser asks before
   you leave the page with choices waiting.
-
-The box is for changes to the tech file. The **Can be ignored** buttons on the findings further
-down the page are a different thing: they only take a finding off the query list, and never
-change the tech file.
 
 ### Module
 
@@ -127,7 +135,7 @@ When a file's module is not one of the four accepted values, choose `ecoa`, `dia
 `sitetasks` or `clinros`, or type another value. Where several files declare the same
 value, one answer can be applied to all of them. This is checked by default; clear it to
 answer for that file only. A file with a choice of its own, or one you ignored, is never
-changed by someone else's answer. When you click Next, the `modules` entry of the top-level
+changed by someone else's answer. When you click **Save**, the `modules` entry of the top-level
 configuration is rewritten, and nothing else in it.
 
 If the configuration itself cannot be read, the module cannot be checked, so no question is
@@ -140,6 +148,15 @@ A question is raised when the `LANGUAGE` value cannot be read, or when the text 
 does not match the code. The dropdown offers the 68 approved codes, each with its language
 and country.
 
+**Where the tool gets the code.** The `LANGUAGE` column comes first. The file name is read only
+as a fallback, when the column is empty or holds something that is not a code. The tool looks
+for a code anywhere in the name (`es_US`, `esUS`, `es-US` or `ES_US`, at the start, the middle
+or the end, so `pro_demo_es_US.csv` works), keeps only the codes on your approved list, and
+takes the last one. A name with no such code gives nothing, and a code that is not on your list
+is never used. The code from the name is used to run the other checks and to suggest the answer;
+the column itself is not changed until you answer. If the column holds a valid code, the name
+is not consulted, even where the two differ.
+
 - A **Suggested** row of buttons comes first when the tool can guess the right code: the code
   in the file name, or the codes of the language it recognized in the text. One click chooses it.
   The list starts on a prompt, so nothing is chosen until you choose it. Typing in the search box
@@ -148,10 +165,15 @@ and country.
   for you. Change or clear the text and a code chosen by typing is taken back; press Enter to keep it.
 - The search box narrows the list by code, language or country. `span`, `es us`, `mexico`
   and `czechia` all work.
-- When you click **Next**, the chosen code is written into every row of `LANGUAGE`, and the
+- When you click **Save**, the chosen code is written into every row of `LANGUAGE`, and the
   file is checked again against it. Flags that depended on the old code disappear and the rest
   remain. If the code you choose still does not fit the text, the question comes back.
-- If a file also has a module question, both choices are applied by the same Next.
+- The findings that say the text is not in the language of the code (**Text does not look like the
+  language of this code**, **Letters that do not belong to this language**, **Wrong language for
+  this code**) are shown straight away, with the Suggestion under the first of them, so the message
+  and the question are read together. Once the code is answered and the file checked again, they go
+  if the code now fits.
+- A file with both a module and a language question has a window for each, and each has its own Save.
 - Answers already given to a module question are kept, and findings marked as ignorable
   stay ignored.
 
